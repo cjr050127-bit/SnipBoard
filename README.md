@@ -6,11 +6,11 @@
 
 Windows 本地图片整理工具，提供图片库和自由参考图画布。支持读取 Snipaste 已保存的贴图、手动导入图片，通过标签、颜色和尺寸寻找素材，再将它们紧凑排列到参考组中。
 
-**当前最新版本：0.5.5 Preview · Windows x64 · 中文界面 · 无需安装 Python**
+**当前最新版本：0.5.5 Preview · Windows x64 · 中文界面 · **
 
 [下载便携版](https://github.com/cjr050127-bit/SnipBoard/releases/tag/v0.5.5) · [使用手册](docs/USER_GUIDE.md) · [更新记录](docs/RELEASE_0_5_5.md) · [问题反馈](https://github.com/cjr050127-bit/SnipBoard/issues)
 
-> SnipBoard 是独立个人项目，与 Snipaste、PureRef 无隶属、合作或官方授权关系。Snipaste 是可选来源；不安装 Snipaste 也能导入和整理本地图片。本仓库展示当前完成版本，仍保留 Preview 标识。
+> SnipBoard 是独立个人项目。Snipaste 是可选来源；不安装 Snipaste 也能导入和整理本地图片。本仓库展示当前完成版本，仍保留 Preview 标识。
 
 ## 产品预览
 
@@ -61,7 +61,7 @@ SHA-256 校验文件与 ZIP 一起提供。在 PowerShell 中运行 `Get-FileHas
 ## 数据、安全与兼容性
 
 - 默认图库位于 `%LOCALAPPDATA%\SnipBoard\library`，图片副本、数据库和布局保存在本机。程序核心代码未实现图片上传或云同步。
-- Snipaste 来源只读：不会写回其图片、标签或图组。除 PNG 外，当前实现还读取 `config.ini`、`.sp0` 的图组名称候选及 `splog.txt`；并非官方 API 集成。
+- Snipaste 来源只读：不会写回其图片、标签或图组。除 PNG 外，当前实现还读取 `config.ini`、`.sp0` 的图组名称候选及 `splog.txt`；
 - 不导入 `.sp1` 截图历史；`.sp2` 仅检查是否存在，未完整解析图组成员。不保证跟随 Snipaste 当前活动组。
 - 关闭普通自动同步但保留“当前工作组”时仍会收集新贴图；需要停用时同时取消当前工作组，或完全退出应用。
 - 从图库删除图片属于逻辑删除，保留源文件与本地副本。升级前建议“文件 → 备份收藏库”；不要用旧版直接打开升级后的数据库。
