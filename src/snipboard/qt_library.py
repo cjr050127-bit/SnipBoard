@@ -1,15 +1,18 @@
 """Independent library windows with inline detail and two recommendation rows."""
 from __future__ import annotations
 
+import base64
+import binascii
+
 from pathlib import Path
 from functools import lru_cache
 
-from PySide6.QtCore import Qt, QSize, QRectF, QAbstractListModel, QModelIndex, QTimer, Signal
+from PySide6.QtCore import Qt, QSize, QRectF, QAbstractListModel, QModelIndex, QTimer, Signal, QEvent
 from PySide6.QtGui import QAction, QColor, QPainter, QPen, QPixmap, QKeySequence, QGuiApplication, QFont, QBrush
 from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QPushButton, QListView, QListWidget, QListWidgetItem, QStyledItemDelegate,
     QLineEdit, QComboBox, QSlider, QCheckBox, QSplitter, QStackedWidget, QToolBar,
-    QGraphicsView, QGraphicsScene, QFileDialog, QMessageBox, QColorDialog, QInputDialog, QStyle, QScrollArea, QMenu)
+    QGraphicsView, QGraphicsScene, QFileDialog, QMessageBox, QColorDialog, QInputDialog, QStyle, QScrollArea, QMenu, QDockWidget)
 
 from .catalog import Catalog
 from .features import COLORS
@@ -209,6 +212,7 @@ class LibraryWindow(QMainWindow):
 
     def _build(self):
         toolbar = QToolBar(self)
+        toolbar.setObjectName("library.toolbar")
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
         for label, callback in [('← 返回', self.back), ('前进 →', self.forward)]:
@@ -238,20 +242,22 @@ class LibraryWindow(QMainWindow):
             button.clicked.connect(callback)
             toolbar.addWidget(button)
 
-        splitter = QSplitter()
-        self.setCentralWidget(splitter)
-        self.sidebar = QScrollArea()
-        self.sidebar.setWidgetResizable(True)
-        self.sidebar.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.docks = {}
+        self.setDockOptions(QMainWindow.AnimatedDocks | QMainWindow.AllowNestedDocks |
+                            QMainWindow.AllowTabbedDocks | QMainWindow.GroupedDragging)
+        self.setCorner(Qt.BottomLeftCorner, Qt.LeftDockWidgetArea)
+        self.setCorner(Qt.BottomRightCorner, Qt.RightDockWidgetArea)
         self.filter_panel = FilterPanel()
-        self.sidebar.setWidget(self.filter_panel)
+        self.filter_panel.setParent(self)
+        self.filter_panel.hide()
         self.filter_panel.changed.connect(self.filters_changed)
         self.filter_panel.clearRequested.connect(self.clear_filters)
         self.tolerance, self.archived = self.filter_panel.tolerance, self.filter_panel.archived
         self.color_buttons = {}
-        self.sidebar.setMinimumWidth(256)
-        self.sidebar.setMaximumWidth(310)
-        splitter.addWidget(self.sidebar)
+        titles = {'color': '色彩筛选', 'brightness': '明度', 'aspect': '图片比例',
+                  'dimensions': '图片尺寸', 'filter_tools': '筛选管理'}
+        for key, widget in self.filter_panel.sections.items():
+            self.add_panel(key, titles[key], widget, Qt.LeftDockWidgetArea, scroll=True)
 
         center = QWidget()
         layout = QVBoxLayout(center)
@@ -316,6 +322,9 @@ class LibraryWindow(QMainWindow):
         self.source_tags.setWordWrap(True)
         self.source_tags.setStyleSheet('color:#8d9aa8;font-size:11px;')
         detail_layout.addWidget(self.source_tags)
+        recommendations = QWidget()
+        recommendation_layout = QVBoxLayout(recommendations)
+        recommendation_layout.setContentsMargins(8, 8, 8, 8)
         recommendation_heading = QHBoxLayout()
         recommendation_heading.addWidget(QLabel('相似图片 · 色彩与构图'))
         recommendation_heading.addStretch()
@@ -323,7 +332,7 @@ class LibraryWindow(QMainWindow):
         self.rec_scope.addItems(['当前交叉筛选范围', '标签与参考组，不限图像属性', '全部图片'])
         self.rec_scope.currentIndexChanged.connect(lambda _: self.request_recommendations())
         recommendation_heading.addWidget(self.rec_scope)
-        detail_layout.addLayout(recommendation_heading)
+        recommendation_layout.addLayout(recommendation_heading)
         self.rec_views, self.rec_models = [], []
         for _ in range(2):
             view = PhotoGrid()
@@ -341,22 +350,21 @@ class LibraryWindow(QMainWindow):
             view.setContextMenuPolicy(Qt.CustomContextMenu)
             view.customContextMenuRequested.connect(lambda pos, grid=view: self.photo_menu(grid, pos))
             view.clicked.connect(lambda index: self.show_photo(index.data(Qt.UserRole)))
-            detail_layout.addWidget(view)
+            recommendation_layout.addWidget(view)
             self.rec_views.append(view)
             self.rec_models.append(model)
-        self.rec_status = QLabel('')
+        self.rec_reflow_timer = QTimer(self)
+        self.rec_reflow_timer.setSingleShot(True)
+        self.rec_reflow_timer.timeout.connect(self.reflow_recommendations)
+        self.rec_views[0].viewport().installEventFilter(self)
+        self.rec_status = QLabel('选择一张图片后显示相似推荐')
         self.rec_status.setStyleSheet('color:#87929f; font-size:11px;')
-        detail_layout.addWidget(self.rec_status)
+        recommendation_layout.addWidget(self.rec_status)
         self.stack.addWidget(detail)
-        splitter.addWidget(center)
-        self.right_sidebar = QSplitter(Qt.Vertical)
-        self.right_sidebar.setMinimumWidth(240)
-        self.right_sidebar.setMaximumWidth(340)
+        self.setCentralWidget(center)
+        self.add_panel('recommendations', '相似推荐', recommendations, Qt.BottomDockWidgetArea)
         work_panel = QWidget()
         work_layout = QVBoxLayout(work_panel)
-        title = QLabel('作品参考组')
-        title.setObjectName('title')
-        work_layout.addWidget(title)
         self.current_work_label = QLabel('尚未设置当前工作组')
         self.current_work_label.setWordWrap(True)
         self.current_work_label.setStyleSheet('color:#a3d7cf;')
@@ -380,12 +388,9 @@ class LibraryWindow(QMainWindow):
         clear_work = QPushButton('不限参考组（保留其他筛选）')
         clear_work.clicked.connect(lambda: self.select_work(None))
         work_layout.addWidget(clear_work)
-        self.right_sidebar.addWidget(work_panel)
+        self.add_panel('work', '当前工作组与参考组', work_panel, Qt.RightDockWidgetArea)
         label_panel = QWidget()
         label_layout = QVBoxLayout(label_panel)
-        label_title = QLabel('标签')
-        label_title.setObjectName('title')
-        label_layout.addWidget(label_title)
         self.label_mode = QComboBox()
         self.label_mode.addItems(['满足所有所选标签（交集）', '满足任一所选标签（并集）'])
         self.label_mode.currentIndexChanged.connect(lambda _: self.refresh())
@@ -402,11 +407,59 @@ class LibraryWindow(QMainWindow):
         self.all_button = QPushButton('不限标签（保留其他筛选）')
         self.all_button.clicked.connect(self.select_all)
         label_layout.addWidget(self.all_button)
-        self.right_sidebar.addWidget(label_panel)
-        self.right_sidebar.setSizes([440, 420])
-        splitter.addWidget(self.right_sidebar)
-        splitter.setSizes([265, 930, 290])
-        splitter.setStretchFactor(1, 1)
+        self.add_panel('labels', '标签', label_panel, Qt.RightDockWidgetArea)
+        self.splitDockWidget(self.docks['color'], self.docks['aspect'], Qt.Vertical)
+        for key in ('brightness', 'dimensions', 'filter_tools'):
+            self.tabifyDockWidget(self.docks['aspect'], self.docks[key])
+        self.docks['aspect'].raise_()
+        self.splitDockWidget(self.docks['work'], self.docks['labels'], Qt.Vertical)
+        self.resizeDocks([self.docks['color'], self.docks['work']], [275, 290], Qt.Horizontal)
+        self.resizeDocks([self.docks['recommendations']], [255], Qt.Vertical)
+        self.default_panel_layout = self.saveState(1)
+
+    def add_panel(self, key, title, widget, area, scroll=False):
+        dock = QDockWidget(title, self)
+        dock.setObjectName('library.panel.' + key)
+        dock.toggleViewAction().setText({'brightness': '明度筛选', 'aspect': '图片比例筛选',
+                                         'dimensions': '图片尺寸筛选'}.get(key, title))
+        dock.setAllowedAreas(Qt.AllDockWidgetAreas)
+        dock.setFeatures(QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetMovable |
+                         QDockWidget.DockWidgetFloatable)
+        dock.setMinimumWidth(230)
+        if scroll:
+            wrapper = QScrollArea()
+            wrapper.setWidgetResizable(True)
+            wrapper.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            wrapper.setWidget(widget)
+            widget = wrapper
+        dock.setWidget(widget)
+        self.addDockWidget(area, dock)
+        self.docks[key] = dock
+        return dock
+
+    def toggle_filter_panels(self):
+        panels = [self.docks[key] for key in self.filter_panel.sections]
+        show = all(panel.isHidden() for panel in panels)
+        for panel in panels:
+            panel.setVisible(show)
+
+    def reset_panel_layout(self):
+        self.restoreState(self.default_panel_layout, 1)
+        self.docks['aspect'].raise_()
+        self.statusBar().showMessage('已恢复默认面板布局；筛选条件保持不变')
+
+    def restore_panel_layout(self, encoded):
+        if not isinstance(encoded, str) or len(encoded) > 100000:
+            return
+        try:
+            data = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error):
+            return
+        if not self.restoreState(data, 1):
+            self.restoreState(self.default_panel_layout, 1)
+        for dock in self.docks.values():
+            if dock.isFloating():
+                self.controller.ensure_onscreen(dock)
 
     def action(self, menu, title, callback, shortcut=None):
         action = QAction(title, self)
@@ -435,7 +488,7 @@ class LibraryWindow(QMainWindow):
         self.action(view, '下一张', lambda: self.step_photo(1), 'Right')
         self.action(view, '适合窗口', self.detail_view.fit, 'F')
         self.action(view, '实际大小', self.detail_view.actual, '1')
-        self.action(view, '显示／隐藏筛选栏', lambda: self.sidebar.setVisible(not self.sidebar.isVisible()), 'Tab')
+        self.action(view, '显示／隐藏全部筛选面板', self.toggle_filter_panels, 'Tab')
         groups = self.menuBar().addMenu('标签与参考组')
         self.action(groups, '全部图片', self.select_all)
         self.action(groups, '在查看器中打开当前选择', self.open_board)
@@ -447,6 +500,11 @@ class LibraryWindow(QMainWindow):
         self.action(windows, '上下排列', lambda: self.controller.tile(False))
         self.action(windows, '移至下一显示器', self.next_screen)
         self.action(windows, '恢复保存的窗口布局', self.controller.restore_windows)
+        windows.addSeparator()
+        for dock in self.docks.values():
+            windows.addAction(dock.toggleViewAction())
+        windows.addSeparator()
+        self.action(windows, '恢复默认面板布局', self.reset_panel_layout)
         settings = self.menuBar().addMenu('设置')
         self.action(settings, '设置…', self.controller.settings)
         self.action(settings, '索引状态与问题', self.controller.diagnostics)
@@ -454,7 +512,7 @@ class LibraryWindow(QMainWindow):
         self.action(settings, '重建缩略图与索引…', lambda: self.check_integrity(True))
         help_menu = self.menuBar().addMenu('帮助')
         self.action(help_menu, '快捷操作', lambda: QMessageBox.information(self, '快捷操作',
-            '单击缩略图：原位放大；Ctrl＋单击多选\n拖缩略图到右上：加入或新建参考组\n拖缩略图到右下标签：加入已有标签\nEsc：返回网格\nCtrl+N：新建图片库窗口\nCtrl+Alt+B：优先打开当前工作组\n查看器 Page Up / Page Down：切换标签或参考组\n图片右下角按住拖动：旋转\n查看器 Alt＋左拖：移动窗口'))
+            '单击缩略图：原位放大；Ctrl＋单击多选\n拖缩略图到参考组面板：加入或新建参考组\n拖缩略图到标签面板：加入已有标签\nEsc：返回网格\nCtrl+N：新建图片库窗口\nCtrl+Alt+B：优先打开当前工作组\n查看器 Page Up / Page Down：切换标签或参考组\n图片右下角按住拖动：旋转\n查看器 Alt＋左拖：移动窗口'))
 
     def update_groups(self):
         previous = self.restoring
@@ -814,6 +872,12 @@ class LibraryWindow(QMainWindow):
         self.reflow_recommendations()
         self.rec_status.setText('点击推荐图可在上方直接查看' if rows else '当前范围内没有其他可推荐图片')
 
+    def eventFilter(self, watched, event):
+        if (hasattr(self, 'rec_reflow_timer') and watched is self.rec_views[0].viewport()
+                and event.type() == QEvent.Resize):
+            self.rec_reflow_timer.start(0)
+        return super().eventFilter(watched, event)
+
     def reflow_recommendations(self):
         columns = max(1, self.rec_views[0].viewport().width() // 128)
         self.rec_models[0].replace(self.recommended[:columns])
@@ -940,6 +1004,7 @@ class LibraryWindow(QMainWindow):
     def state(self):
         rect = self.normalGeometry() if self.isMaximized() else self.geometry()
         return {'geometry': [rect.x(), rect.y(), rect.width(), rect.height()],
+                'panel_layout': base64.b64encode(bytes(self.saveState(1))).decode('ascii'),
                 'groups': self.selected_groups, 'colors': self.colors, 'search': self.search.text(),
                 'work_group': self.selected_work, 'properties': self.filter_panel.state(),
                 'label_mode': self.label_mode.currentIndex(),
@@ -957,6 +1022,7 @@ class LibraryWindow(QMainWindow):
         if (isinstance(geometry, list) and len(geometry) == 4 and
                 all(isinstance(n, int) and abs(n) < 100000 for n in geometry) and min(geometry[2:]) > 0):
             self.setGeometry(*geometry)
+        self.restore_panel_layout(state.get('panel_layout'))
         self.selected_groups = state.get('groups')
         self.selected_work = state.get('work_group')
         self.label_mode.setCurrentIndex(state.get('label_mode', 0))

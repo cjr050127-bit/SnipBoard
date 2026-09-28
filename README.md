@@ -6,24 +6,38 @@
 
 Windows 本地图片整理工具，提供图片库和自由参考图画布。支持读取 Snipaste 已保存的贴图、手动导入图片，通过标签、颜色和尺寸寻找素材，再将它们紧凑排列到参考组中。
 
-**当前最新版本：0.5.5 Preview · Windows x64 · 中文界面 · 无需安装 Python**
+**当前最新版本：0.6.0 Preview · Windows x64 · 中文界面 · 无需安装 Python**
 
-[下载便携版](https://github.com/cjr050127-bit/SnipBoard/releases/tag/v0.5.5) · [使用手册](docs/USER_GUIDE.md) · [更新记录](docs/RELEASE_0_5_5.md) · [问题反馈](https://github.com/cjr050127-bit/SnipBoard/issues)
+[下载便携版](https://github.com/cjr050127-bit/SnipBoard/releases/tag/v0.6.0) · [使用手册](docs/USER_GUIDE.md) · [更新记录](docs/RELEASE_0_5_5.md) · [问题反馈](https://github.com/cjr050127-bit/SnipBoard/issues)
 
 > SnipBoard 是独立个人项目，与 Snipaste、PureRef 无隶属、合作或官方授权关系。Snipaste 是可选来源；不安装 Snipaste 也能导入和整理本地图片。本仓库展示当前完成版本，仍保留 Preview 标识。
 
+## 0.6.0：自由组合的面板
+
+拖动面板标题栏，可停靠到窗口四边、与其他面板叠成标签页，或拖出成为浮动窗口。双击标题栏可切换浮动与停靠，拖动面板边界调整尺寸。
+
+在 **窗口** 菜单勾选或取消：当前工作组与参考组、标签、色彩筛选、明度筛选、图片比例筛选、图片尺寸筛选、筛选管理、相似推荐。点面板右上角 × 也可隐藏，之后可从该菜单找回。
+
+- **窗口 → 恢复默认面板布局**：找回全部面板并恢复默认位置，保留筛选条件。
+- **Tab**：统一显示／隐藏五个筛选面板。
+- 布局随各图库窗口分别保存，正常退出并重启后恢复位置、浮动状态、标签页与显隐；旧版窗口状态自动使用默认面板布局。
+- 隐藏面板不会清除筛选、删除标签或停止当前工作组收集；相似推荐可独立拖出与调整大小。
+
 ## 产品预览
 
-以下是 0.5.5 实际程序使用合成测试图片的截图，不包含私人图库内容。
+以下是 0.6.0 实际程序使用合成测试图片的截图，不包含私人图库内容。
 
 ![图片库：交叉筛选、标签、参考组与相似图片](docs/images/library.png)
 
-![独立参考图查看器：图片移动、缩放与旋转](docs/images/viewer.png)
+![面板重新组合后的图片详情与相似推荐](docs/images/docked-detail.png)
+
+![拖出主窗口的独立图片比例面板](docs/images/floating-panel.png)
 
 ## 能做什么
 
 | 功能 | 用法与价值 |
 | --- | --- |
+| 可停靠面板 | 八个独立面板，浮动、停靠、标签页组合，窗口菜单显示开关及布局恢复 |
 | 双界面 | 图片库负责查找整理，参考图画布负责并排观察；可同时打开多个图库窗口 |
 | 本地图片导入 | PNG、JPEG、WebP、BMP、TIFF、GIF；复制入库并去重，保留原文件 |
 | Snipaste 兼容读取 | 自动发现或手动连接本机来源，读取已保存贴图 PNG，约每 5 秒检查更新 |
@@ -36,13 +50,13 @@ Windows 本地图片整理工具，提供图片库和自由参考图画布。支
 
 ## 下载与开始使用
 
-1. 打开 [v0.5.5 下载页](https://github.com/cjr050127-bit/SnipBoard/releases/tag/v0.5.5)，下载 **SnipBoard-0.5.5-Windows-x64.zip**。GitHub 自动生成的 `Source code` 是源码，不是可运行便携包。
+1. 打开 [v0.6.0 下载页](https://github.com/cjr050127-bit/SnipBoard/releases/tag/v0.6.0)，下载 **SnipBoard-0.6.0-Windows-x64.zip**。GitHub 自动生成的 `Source code` 是源码，不是可运行便携包。
 2. 完整解压至有写入权限的普通文件夹；保留 `SnipBoard.exe` 旁的 `_internal` 文件夹，不要只拖出 EXE。
 3. 双击 `SnipBoard.exe`。无需 Python；当前提供 Windows x64 包，建议使用 Windows 10/11 64 位，干净系统兼容性尚待更多实测。应用尚未代码签名；如果系统提示未知发布者，请核对下载来源和校验值。
 4. 首次连接会查找 Snipaste，唯一来源自动连接，多来源供选择；也可选择“暂时跳过”，用 **Ctrl+O** 导入本地图片。
 5. 拖图片到右侧建立参考组；打开参考图查看器，调整窗口大小后按 **Ctrl+P** 紧凑排列。
 
-SHA-256 校验文件与 ZIP 一起提供。在 PowerShell 中运行 `Get-FileHash .\SnipBoard-0.5.5-Windows-x64.zip -Algorithm SHA256`，与同页 `.sha256` 文件比较。
+SHA-256 校验文件与 ZIP 一起提供。在 PowerShell 中运行 `Get-FileHash .\SnipBoard-0.6.0-Windows-x64.zip -Algorithm SHA256`，与同页 `.sha256` 文件比较。
 
 ## 常用操作
 
@@ -69,11 +83,11 @@ SHA-256 校验文件与 ZIP 一起提供。在 PowerShell 中运行 `Get-FileHas
 
 ## 版本与验证范围
 
-0.5.5 重构紧凑拼版，默认间距 3 px，支持独立调整至 0，兼顾图片大小与减少留白。极端长宽比或斜向旋转仍可能有空白，不保证数学最优。
+0.6.0 将固定侧栏改为八个可停靠面板，并保存各窗口的面板布局。紧凑拼版延续 0.5.5 的算法与默认 3 px 间距。
 
 ![合成数据的紧凑拼版对比](docs/images/packing.png)
 
-发布准备期间完整回归 **108 项测试通过**。既有验收覆盖原生隐藏窗口、旋转、布局恢复及高 DPI；真实多显示器动态 DPI、睡眠恢复、万张真实图片性能和干净 Windows 环境仍待实测。详细数据见 [0.5.5 更新记录](docs/RELEASE_0_5_5.md)。
+发布准备期间完整回归 **114 项测试通过**。既有验收覆盖原生隐藏窗口、旋转、布局恢复及高 DPI；真实多显示器动态 DPI、睡眠恢复、万张真实图片性能和干净 Windows 环境仍待实测。详细数据见 [0.6.0 更新记录](docs/RELEASE_0_5_5.md)。
 
 ## 从源码运行
 
@@ -89,7 +103,7 @@ python -m venv .venv
 .\build.ps1 -InstallPyInstaller
 ```
 
-构建输出位于 `dist/SnipBoard-0.5.5/`。打包和公开分发还需携带第三方许可及对应库源码，见 [依赖说明](THIRD_PARTY_NOTICES.md)。
+构建输出位于 `dist/SnipBoard-0.6.0/`。打包和公开分发还需携带第三方许可及对应库源码，见 [依赖说明](THIRD_PARTY_NOTICES.md)。
 
 ## 支持这个个人项目
 

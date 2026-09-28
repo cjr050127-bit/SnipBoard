@@ -20,4 +20,4 @@ exe = EXE(
     icon=str(root / 'assets' / 'snipboard.png'),
     version=str(root / 'packaging' / 'version_info_qt.txt'),
 )
-coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='SnipBoard-0.5.5')
+coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='SnipBoard-0.6.0')

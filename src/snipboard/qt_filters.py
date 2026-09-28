@@ -91,14 +91,9 @@ class FilterPanel(QWidget):
         super().__init__()
         self.restoring = False
         self.setObjectName('filterSurface')
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        title = QLabel('交叉筛选')
-        title.setObjectName('title')
-        layout.addWidget(title)
-        tip = QLabel('与右侧标签、参考组共同取交集')
-        tip.setWordWrap(True)
-        layout.addWidget(tip)
+        self.sections = {}
+        self.section_layout = QVBoxLayout(self)
+        layout = self.section('color')
         self.color_enabled = QCheckBox('启用色彩筛选 · HSV 色盘')
         layout.addWidget(self.color_enabled)
         self.wheel = ColorWheel()
@@ -122,12 +117,18 @@ class FilterPanel(QWidget):
         self.coverage.setSuffix('%')
         form.addRow('色差容差', self.tolerance)
         form.addRow('色彩最低占比', self.coverage)
+        layout.addLayout(form)
+        layout = self.section('brightness')
+        form = QFormLayout()
         self.brightness_min, self.brightness_max = QSpinBox(), QSpinBox()
         for spin in (self.brightness_min, self.brightness_max):
             spin.setRange(0, 100)
         self.brightness_max.setValue(100)
         form.addRow('平均明度 L* ≥', self.brightness_min)
         form.addRow('平均明度 L* ≤', self.brightness_max)
+        layout.addLayout(form)
+        layout = self.section('aspect')
+        form = QFormLayout()
         self.orientation = QComboBox()
         for label, value in [('不限方向', 'any'), ('横图', 'landscape'), ('竖图', 'portrait'), ('近方图', 'square')]:
             self.orientation.addItem(label, value)
@@ -143,6 +144,9 @@ class FilterPanel(QWidget):
         self.ratio_value.setEnabled(False)
         self.ratio.currentIndexChanged.connect(lambda _: self.ratio_value.setEnabled(self.ratio.currentData() == -1))
         form.addRow('自定义 宽÷高', self.ratio_value)
+        layout.addLayout(form)
+        layout = self.section('dimensions')
+        form = QFormLayout()
         self.dimensions = {}
         for key, label in [('min_width', '最小宽度'), ('max_width', '最大宽度'), ('min_height', '最小高度'), ('max_height', '最大高度')]:
             spin = QSpinBox()
@@ -151,6 +155,10 @@ class FilterPanel(QWidget):
             self.dimensions[key] = spin
             form.addRow(label, spin)
         layout.addLayout(form)
+        layout = self.section('filter_tools')
+        tip = QLabel('所有面板中的条件共同筛选；隐藏面板不会清除条件。')
+        tip.setWordWrap(True)
+        layout.addWidget(tip)
         self.archived = QCheckBox('仅查看源图已移除的收藏')
         layout.addWidget(self.archived)
         clear = QPushButton('清除全部筛选')
@@ -164,6 +172,16 @@ class FilterPanel(QWidget):
         self.color_enabled.toggled.connect(self.emit_changed)
         self.archived.toggled.connect(self.emit_changed)
         self.update_readout()
+
+    def section(self, key):
+        widget = QWidget(self)
+        widget.setObjectName("dockSurface")
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setAlignment(Qt.AlignTop)
+        self.sections[key] = widget
+        self.section_layout.addWidget(widget)
+        return layout
 
     def emit_changed(self, *_):
         self.update_readout()

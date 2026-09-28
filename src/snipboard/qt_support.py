@@ -12,7 +12,7 @@ from PySide6.QtGui import QImageReader, QPixmap
 
 STYLE = '''
 QWidget { color: #e3e5e9; font-family: "Microsoft YaHei UI", "Segoe UI"; font-size: 13px; }
-QMainWindow, QDialog, QScrollArea, QWidget#filterSurface { background: #17191d; }
+QMainWindow, QDialog, QScrollArea, QWidget#filterSurface, QWidget#dockSurface { background: #17191d; }
 QMenuBar, QToolBar { background: #202328; border: none; padding: 5px; spacing: 8px; }
 QMenuBar::item:selected, QMenu::item:selected { background: #38454e; }
 QMenu { background: #252a30; border: 1px solid #414850; padding: 6px; }
@@ -31,6 +31,12 @@ QStatusBar { color: #a1a8b3; background: #202328; }
 QScrollBar:vertical { background: #1c1f24; width: 10px; }
 QScrollBar::handle:vertical { background: #4b525e; min-height: 25px; border-radius: 4px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; }
+QDockWidget { background: #17191d; }
+QDockWidget::title { background: #262c33; padding: 7px 8px; text-align: left; }
+QMainWindow::separator { background: #30363e; width: 5px; height: 5px; }
+QMainWindow::separator:hover { background: #7cafbc; }
+QTabBar::tab { background: #202328; color: #b4becb; padding: 6px; border: 1px solid #343940; }
+QTabBar::tab:selected { background: #34434c; color: #ffffff; }
 QSplitter::handle { background: #30363e; width: 1px; }
 QToolTip { background: #313840; color: white; border: none; padding: 5px; }
 '''

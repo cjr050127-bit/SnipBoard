@@ -19,3 +19,5 @@ docs/*
 !docs/images/
 !docs/PUBLIC_RELEASE.md
 !docs/RELEASE_NOTES_0_5_5.md
+
+!docs/RELEASE_0_6_0.md
