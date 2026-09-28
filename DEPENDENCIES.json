@@ -1,0 +1,78 @@
+{
+  "python": "3.14.5 (tags/v3.14.5:5607950, May 10 2026, 10:43:50) [MSC v.1944 64 bit (AMD64)]",
+  "packages": [
+    {
+      "name": "PySide6-Essentials",
+      "version": "6.11.2",
+      "license_metadata": "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only",
+      "notices": [
+        "third-party\\PySide6-Essentials\\pyside6_essentials-6.11.2.dist-info\\licenses\\LicenseRef-Qt-Commercial.txt"
+      ],
+      "build_only": false
+    },
+    {
+      "name": "shiboken6",
+      "version": "6.11.2",
+      "license_metadata": "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only",
+      "notices": [
+        "third-party\\shiboken6\\shiboken6-6.11.2.dist-info\\licenses\\LicenseRef-Qt-Commercial.txt"
+      ],
+      "build_only": false
+    },
+    {
+      "name": "Pillow",
+      "version": "12.2.0",
+      "license_metadata": "MIT-CMU",
+      "notices": [
+        "third-party\\Pillow\\pillow-12.2.0.dist-info\\licenses\\LICENSE"
+      ],
+      "build_only": false
+    },
+    {
+      "name": "numpy",
+      "version": "2.4.6",
+      "license_metadata": "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0",
+      "notices": [
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\LICENSE.txt",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\_core\\include\\numpy\\libdivide\\LICENSE.txt",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\_core\\src\\common\\pythoncapi-compat\\COPYING",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\_core\\src\\highway\\LICENSE",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\_core\\src\\multiarray\\dragon4_LICENSE.txt",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\_core\\src\\npysort\\x86-simd-sort\\LICENSE.md",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\_core\\src\\umath\\svml\\LICENSE",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\fft\\pocketfft\\LICENSE.md",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\linalg\\lapack_lite\\LICENSE.txt",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\ma\\LICENSE",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\random\\LICENSE.md",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\random\\src\\distributions\\LICENSE.md",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\random\\src\\mt19937\\LICENSE.md",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\random\\src\\pcg64\\LICENSE.md",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\random\\src\\philox\\LICENSE.md",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\random\\src\\sfc64\\LICENSE.md",
+        "third-party\\numpy\\numpy-2.4.6.dist-info\\licenses\\numpy\\random\\src\\splitmix64\\LICENSE.md",
+        "third-party\\numpy\\numpy\\_core\\include\\numpy\\random\\LICENSE.txt",
+        "third-party\\numpy\\numpy\\ma\\LICENSE",
+        "third-party\\numpy\\numpy\\random\\LICENSE.md"
+      ],
+      "build_only": false
+    },
+    {
+      "name": "PyInstaller",
+      "version": "6.22.3",
+      "license_metadata": "GPLv2-or-later with a special exception which allows to use PyInstaller to build and distribute non-free programs (including commercial ones)",
+      "notices": [
+        "third-party\\PyInstaller\\pyinstaller-6.22.3.dist-info\\licenses\\COPYING.txt"
+      ],
+      "build_only": true
+    },
+    {
+      "name": "pyinstaller-hooks-contrib",
+      "version": "2026.7",
+      "license_metadata": null,
+      "notices": [
+        "third-party\\pyinstaller-hooks-contrib\\pyinstaller_hooks_contrib-2026.7.dist-info\\licenses\\LICENSE"
+      ],
+      "build_only": true
+    }
+  ]
+}
