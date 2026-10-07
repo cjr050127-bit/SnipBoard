@@ -192,7 +192,7 @@ class CollectionTests(unittest.TestCase):
             self.assertEqual(reopened.tags_for(digest), ['已有标签'])
             self.assertEqual(reopened.add_to_label(reference, [digest]), 0)
             self.assertEqual(reopened.db.execute('SELECT count(*) FROM label_members').fetchone()[0], 1)
-        self.assertTrue(list((self.catalog.root / 'backups').glob('before-v5-*.sqlite3')))
+        self.assertTrue(list((self.catalog.root / 'backups').glob(f'before-v{Catalog.schema_version}-*.sqlite3')))
 
 
 if __name__ == '__main__':

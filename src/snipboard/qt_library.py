@@ -318,9 +318,12 @@ class LibraryWindow(QMainWindow):
         add_current.clicked.connect(self.add_current_photo)
         tag_controls.addWidget(add_current)
         detail_layout.addLayout(tag_controls)
-        self.source_tags = QLabel()
-        self.source_tags.setWordWrap(True)
-        self.source_tags.setStyleSheet('color:#8d9aa8;font-size:11px;')
+        self.source_tags = QScrollArea()
+        self.source_tags.setWidgetResizable(True)
+        self.source_tags.setFixedHeight(54)
+        self.source_tags.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.source_tags.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.source_tags.setStyleSheet('QScrollArea { border:none; }')
         detail_layout.addWidget(self.source_tags)
         recommendations = QWidget()
         recommendation_layout = QVBoxLayout(recommendations)
@@ -622,6 +625,8 @@ class LibraryWindow(QMainWindow):
         digests = [i.data(Qt.UserRole)['digest'] for i in targets]
         menu = QMenu(self)
         title = f'从图片库删除所选 {len(digests)} 张图片（保留源文件）' if len(digests) > 1 else '从图片库删除图片（保留源文件）'
+        self.add_remove_label_menu(menu, index.data(Qt.UserRole)['digest'])
+        menu.addSeparator()
         menu.addAction(title, lambda: self.controller.delete_images(digests))
         menu.exec(grid.viewport().mapToGlobal(position))
 
@@ -630,8 +635,67 @@ class LibraryWindow(QMainWindow):
             return
         digest = self.current['digest']
         menu = QMenu(self)
+        self.add_remove_label_menu(menu, digest)
+        menu.addSeparator()
         menu.addAction('从图片库删除图片（保留源文件）', lambda: self.controller.delete_images([digest]))
         menu.exec(self.detail_view.viewport().mapToGlobal(position))
+
+    def add_remove_label_menu(self, menu, digest):
+        submenu = menu.addMenu('取消标签')
+        labels = self.catalog.image_labels(digest)
+        for label in labels:
+            action = submenu.addAction(label['name'].replace('&', '&&'))
+            action.setToolTip('仅取消右击的这张图片的标签')
+            action.triggered.connect(lambda checked=False, ref=label['id'], image=digest:
+                                     self.remove_image_label(image, ref))
+        if not labels:
+            submenu.addAction('暂无标签').setEnabled(False)
+        return submenu
+
+    def remove_image_label(self, digest, reference):
+        if self.catalog.remove_from_label(reference, digest):
+            if self.current and self.current['digest'] == digest:
+                self.tag_editor.setText('，'.join(self.catalog.tags_for(digest)))
+                self.refresh_image_labels()
+            self.changed_collections()
+            self.statusBar().showMessage('已取消这张图片的标签，图片与标签本身均保留')
+
+    def refresh_image_labels(self):
+        old = self.source_tags.takeWidget()
+        if old:
+            old.deleteLater()
+        content = QWidget()
+        content.setObjectName('dockSurface')
+        layout = QHBoxLayout(content)
+        layout.setContentsMargins(0, 2, 0, 2)
+        layout.setSpacing(8)
+        layout.addWidget(QLabel('图片标签'))
+        self.tag_remove_buttons = {}
+        labels = self.catalog.image_labels(self.current['digest']) if self.current else []
+        for label in labels:
+            chip = QWidget()
+            chip.setFixedHeight(32)
+            chip.setStyleSheet('QWidget { background:#29343c; border-radius:5px; }')
+            row = QHBoxLayout(chip)
+            row.setContentsMargins(9, 0, 3, 0)
+            title = QLabel(label['name'])
+            title.setTextFormat(Qt.PlainText)
+            row.addWidget(title)
+            close = QPushButton('×')
+            close.setFixedSize(26, 26)
+            close.setStyleSheet('QPushButton { border:none; padding:0; font-size:18px; } QPushButton:hover { background:#645052; }')
+            close.setToolTip('取消标签：' + label['name'])
+            close.setAccessibleName('取消标签：' + label['name'])
+            digest = self.current['digest']
+            close.clicked.connect(lambda checked=False, image=digest, ref=label['id']:
+                                  self.remove_image_label(image, ref))
+            self.tag_remove_buttons[label['id']] = close
+            row.addWidget(close)
+            layout.addWidget(chip)
+        if not labels:
+            layout.addWidget(QLabel('暂无标签'))
+        layout.addStretch()
+        self.source_tags.setWidget(content)
 
     def work_menu(self, position):
         item = self.work_list.itemAt(position)
@@ -793,14 +857,14 @@ class LibraryWindow(QMainWindow):
             if self.current.get('manual_tags') != updated.get('manual_tags'):
                 self.tag_editor.setText('，'.join(updated['manual_tags']))
             self.current = updated
-            self.source_tags.setText('来源标签：' + ' · '.join(name for _, name in self.current['memberships']))
+            self.refresh_image_labels()
             self.request_recommendations()
 
     def show_photo(self, row, record=True):
         if not row or not self.catalog.has_image(row['digest']):
             return
         # Navigation history can outlive label edits; refresh the displayed metadata.
-        row = dict(row)
+        row = self.catalog.query(archived=None, digests=[row['digest']])[0]
         visible_labels = {g['id'] for g in self.catalog.label_rows()}
         row['memberships'] = [m for m in row['memberships'] if m[0] in visible_labels]
         row['board_name'] = row['memberships'][0][1] if row['memberships'] else '未分类'
@@ -809,7 +873,7 @@ class LibraryWindow(QMainWindow):
             self.grid_position = self.grid.verticalScrollBar().value()
         self.current = row
         self.tag_editor.setText('，'.join(self.catalog.tags_for(row['digest'])))
-        self.source_tags.setText('来源标签：' + ' · '.join(name for _, name in row['memberships']))
+        self.refresh_image_labels()
         self.stack.setCurrentIndex(1)
         self.detail_view.display(row)
         self.summary.setText(f"{row['source_name']}  ·  {row['width']} × {row['height']}  ·  {row['board_name']}")

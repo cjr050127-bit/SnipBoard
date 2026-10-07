@@ -1,4 +1,4 @@
-param([switch]$InstallPyInstaller, [switch]$SkipTests)
+﻿param([switch]$InstallPyInstaller, [switch]$SkipTests)
 $ErrorActionPreference = 'Stop'
 $project = $PSScriptRoot
 $python = Join-Path $project '.venv\Scripts\python.exe'
@@ -20,7 +20,7 @@ try {
     $env:PATH = @((Join-Path $env:SystemRoot 'System32'), $env:SystemRoot, (Split-Path $python)) -join ';'
     & $python -m PyInstaller --noconfirm --clean SnipBoard-Qt.spec
     if ($LASTEXITCODE -ne 0) { throw '打包失败。' }
-    $exe = Join-Path $project 'dist\SnipBoard-0.6.0\SnipBoard.exe'
+    $exe = Join-Path $project 'dist\SnipBoard-0.6.1\SnipBoard.exe'
     $selfTestRoot = Join-Path $project ('build\qt-selftest-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $selfTestRoot | Out-Null
     try {
@@ -38,12 +38,12 @@ try {
         if (Test-Path -LiteralPath $resolved) { Remove-Item -LiteralPath $resolved -Recurse -Force }
     }
     $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
-    Set-Content -LiteralPath (Join-Path $project 'dist\SnipBoard-0.6.0\SHA256SUMS.txt') -Value "$hash *SnipBoard.exe" -Encoding ascii
+    Set-Content -LiteralPath (Join-Path $project 'dist\SnipBoard-0.6.1\SHA256SUMS.txt') -Value "$hash *SnipBoard.exe" -Encoding ascii
     $releaseDirectory = Split-Path $exe
     Copy-Item -LiteralPath (Join-Path $project 'README.md') -Destination (Join-Path $releaseDirectory '使用说明.md')
     $releaseDocs = Join-Path $releaseDirectory 'docs'
     New-Item -ItemType Directory -Path $releaseDocs -Force | Out-Null
-    foreach ($name in @('USER_GUIDE.md', 'PRIVACY.md', 'COMPATIBILITY_AND_LEGAL.md', 'DEPENDENCY_SOURCES.json', 'RELEASE_0_6_0.md', 'RELEASE_0_5_5.md')) {
+    foreach ($name in @('USER_GUIDE.md', 'PRIVACY.md', 'COMPATIBILITY_AND_LEGAL.md', 'DEPENDENCY_SOURCES.json', 'RELEASE_0_6_1.md', 'RELEASE_0_6_0.md', 'RELEASE_0_5_5.md')) {
         Copy-Item -LiteralPath (Join-Path $project ('docs/' + $name)) -Destination $releaseDocs
     }
     Copy-Item -LiteralPath (Join-Path $project 'docs/images') -Destination $releaseDocs -Recurse -Force

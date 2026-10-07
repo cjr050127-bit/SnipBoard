@@ -19,7 +19,7 @@ from .source import inspect_source, stable_read, history_directory
 
 
 class Catalog(Library):
-    schema_version = 5
+    schema_version = 6
     local_source = 'snipboard:local-imports'
     def __init__(self, root):
         root = Path(root)
@@ -68,6 +68,9 @@ class Catalog(Library):
                 board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
                 digest TEXT NOT NULL, PRIMARY KEY(board_id,digest));
             CREATE INDEX IF NOT EXISTS local_label_images ON label_members(digest);
+            CREATE TABLE IF NOT EXISTS excluded_label_members (
+                board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+                digest TEXT NOT NULL, PRIMARY KEY(board_id,digest));
         ''')
         if previous_version < 3:
             with self.db:
@@ -323,6 +326,7 @@ class Catalog(Library):
 
     def query(self, boards=None, text='', archived=False, digests=None):
         removed = {r[0] for r in self.db.execute('SELECT key FROM removed_labels')}
+        excluded = {(r[0], r[1]) for r in self.db.execute('SELECT board_id,digest FROM excluded_label_members')}
         where, params = ['NOT EXISTS(SELECT 1 FROM deleted_images d WHERE d.digest=i.digest)'], []
         if digests is not None:
             if not digests:
@@ -335,6 +339,7 @@ class Catalog(Library):
                 return []
             where.append('i.board_id IN (' + ','.join('?' * len(boards)) + ')')
             params.extend(boards)
+            where.append('NOT EXISTS(SELECT 1 FROM excluded_label_members e WHERE e.board_id=i.board_id AND e.digest=i.digest)')
         if archived:
             where.append('b.source<>?')
             params.append(self.local_source)
@@ -344,12 +349,12 @@ class Catalog(Library):
             params.append(self.local_source)
         if text:
             where.append("(instr(casefold(i.source_name||' '||i.note||' '||CASE WHEN EXISTS(SELECT 1 FROM removed_labels r "
-                         "WHERE r.key=CAST(b.id AS TEXT)) THEN '' ELSE b.name END),?)>0 OR EXISTS("
+                         "WHERE r.key=CAST(b.id AS TEXT)) OR EXISTS(SELECT 1 FROM excluded_label_members e WHERE e.board_id=b.id AND e.digest=i.digest) THEN '' ELSE b.name END),?)>0 OR EXISTS("
                          "SELECT 1 FROM image_tags mt JOIN manual_tags t ON t.id=mt.tag_id "
                          "WHERE mt.digest=i.digest AND instr(casefold(t.name),?)>0) OR EXISTS("
                          "SELECT 1 FROM label_members lm JOIN boards lb ON lb.id=lm.board_id "
                          "WHERE lm.digest=i.digest AND instr(casefold(lb.name),?)>0 AND NOT EXISTS("
-                         "SELECT 1 FROM removed_labels r WHERE r.key=CAST(lb.id AS TEXT))))")
+                         "SELECT 1 FROM removed_labels r WHERE r.key=CAST(lb.id AS TEXT)) AND NOT EXISTS(SELECT 1 FROM excluded_label_members e WHERE e.board_id=lb.id AND e.digest=i.digest)))")
             params.extend([text.casefold()] * 3)
         sql = '''SELECT i.*, b.name AS board_name, b.group_id, b.source,
                  f.width,f.height,f.data AS feature FROM items i JOIN boards b ON b.id=i.board_id
@@ -360,7 +365,7 @@ class Catalog(Library):
             tag_map.setdefault(tag['digest'], []).append(tag['name'])
         for row in self.db.execute(sql, params):
             item = dict(row)
-            membership = [] if str(item['board_id']) in removed else [[item['board_id'], item['board_name']]]
+            membership = [] if str(item['board_id']) in removed or (item['board_id'], item['digest']) in excluded else [[item['board_id'], item['board_name']]]
             if item['digest'] in result:
                 result[item['digest']]['memberships'].extend(membership)
                 continue
@@ -373,7 +378,7 @@ class Catalog(Library):
             item['width'], item['height'] = item['width'] or 1, item['height'] or 1
             result[item['digest']] = item
         for member in self.db.execute('SELECT m.digest,b.id,b.name FROM label_members m JOIN boards b ON b.id=m.board_id'):
-            if member['digest'] in result and str(member['id']) not in removed:
+            if member['digest'] in result and str(member['id']) not in removed and (member['id'], member['digest']) not in excluded:
                 memberships = result[member['digest']]['memberships']
                 if not any(ident == member['id'] for ident, _ in memberships):
                     memberships.append([member['id'], member['name']])
@@ -506,6 +511,7 @@ class Catalog(Library):
             UNION SELECT board_id,digest FROM label_members) m
             WHERE EXISTS(SELECT 1 FROM items i WHERE i.digest=m.digest)
             AND NOT EXISTS(SELECT 1 FROM deleted_images d WHERE d.digest=m.digest)
+            AND NOT EXISTS(SELECT 1 FROM excluded_label_members e WHERE e.board_id=m.board_id AND e.digest=m.digest)
             GROUP BY m.board_id''', (self.local_source,)))
         for group in result:
             group['count'] = counts.get(group['id'], 0)
@@ -529,7 +535,8 @@ class Catalog(Library):
                 if not self.has_image(digest):
                     continue
                 if isinstance(reference, int):
-                    # Persist explicit membership even if it is currently also in the source.
+                    # An explicit re-add overrides a previous local exclusion.
+                    self.db.execute('DELETE FROM excluded_label_members WHERE board_id=? AND digest=?', (reference, digest))
                     self.db.execute('INSERT OR IGNORE INTO label_members VALUES(?,?)', (reference, digest))
                 else:
                     self.db.execute('INSERT OR IGNORE INTO image_tags VALUES(?,?)', (digest, int(reference[4:])))
@@ -537,6 +544,33 @@ class Catalog(Library):
                                     (json.dumps(self.tags_for(digest), ensure_ascii=False), digest))
                 added += digest not in existing
         return added
+
+    def image_labels(self, digest):
+        """Visible source/local and manual labels attached to one image."""
+        rows = self.query(archived=None, digests=[digest])
+        if not rows:
+            return []
+        row = rows[0]
+        references = {ident for ident, _ in row['memberships']}
+        names = set(row['manual_tags'])
+        return [g for g in self.label_rows() if g['id'] in references
+                or (g['kind'] == 'manual' and g['name'] in names)]
+
+    def remove_from_label(self, reference, digest):
+        """Detach only this image. Source memberships stay excluded across sync."""
+        if not self.has_image(digest):
+            return False
+        if not any(g['id'] == reference for g in self.image_labels(digest)):
+            return False
+        with self.db:
+            if isinstance(reference, int):
+                self.db.execute('DELETE FROM label_members WHERE board_id=? AND digest=?', (reference, digest))
+                self.db.execute('INSERT OR IGNORE INTO excluded_label_members VALUES(?,?)', (reference, digest))
+            else:
+                self.db.execute('DELETE FROM image_tags WHERE tag_id=? AND digest=?', (int(reference[4:]), digest))
+                self.db.execute('UPDATE items SET tags=? WHERE digest=?',
+                                (json.dumps(self.tags_for(digest), ensure_ascii=False), digest))
+        return True
 
     def has_image(self, digest):
         return bool(self.db.execute('''SELECT 1 FROM items WHERE digest=?
@@ -644,7 +678,8 @@ class Catalog(Library):
             return {r[0] for r in self.db.execute('''SELECT digest FROM source_files WHERE board_id=? AND present=1
                 UNION SELECT i.digest FROM items i JOIN boards b ON b.id=i.board_id WHERE b.id=? AND b.source=?
                 UNION SELECT digest FROM label_members WHERE board_id=?''',
-                (reference, reference, self.local_source, reference))}
+                (reference, reference, self.local_source, reference))} - {r[0] for r in self.db.execute(
+                    'SELECT digest FROM excluded_label_members WHERE board_id=?', (reference,))}
         kind, _, value = str(reference).partition(':')
         if not value.isdigit() or kind not in ('tag', 'work'):
             return set()
