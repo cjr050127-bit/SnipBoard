@@ -195,11 +195,20 @@ class BoardWindow(QGraphicsView):
         self.images.ready.connect(lambda _: self.viewport().update())
         self.commands = {}
         self._commands()
+        self.layer.changed.connect(self.sync_layer_action)
         geometry = self.catalog.get_setting('board.geometry')
         if (isinstance(geometry, list) and len(geometry) == 4 and
                 all(isinstance(n, int) and abs(n) < 100000 for n in geometry) and min(geometry[2:]) > 0):
             self.setGeometry(*geometry)
-        self.layer.set_mode(self.catalog.get_setting('board.layer', 'normal'))
+        mode = self.catalog.get_setting('board.layer', 'top')
+        if not self.catalog.get_setting('board.top_default_migrated', False):
+            # Older builds defaulted to normal. Adopt the new default once;
+            # subsequent explicit cancellation is retained across restarts.
+            if mode == 'normal':
+                mode = 'top'
+            self.catalog.set_setting('board.layer', mode)
+            self.catalog.set_setting('board.top_default_migrated', True)
+        self.layer.set_mode(mode)
         self.save_timer = QTimer(self)
         self.save_timer.setSingleShot(True)
         self.save_timer.timeout.connect(self.save)
@@ -300,8 +309,10 @@ class BoardWindow(QGraphicsView):
         self._action('恢复原始角度', lambda: self.rotate(0, absolute=True), 'Ctrl+R')
         self._action('上一标签／参考组', lambda: self.change_group(-1), 'PgUp')
         self._action('下一标签／参考组', lambda: self.change_group(1), 'PgDown')
+        top = self._action('始终置顶', self.toggle_topmost, 'Ctrl+Shift+A')
+        top.setCheckable(True)
         self._action('普通层级', lambda: self.set_layer('normal'))
-        self._action('总在最前', lambda: self.set_layer('top'), 'Ctrl+Shift+A')
+        self._action('总在最前', lambda: self.set_layer('top'))
         self._action('总在最后', lambda: self.set_layer('bottom'), 'Ctrl+Shift+B')
         self._action('在指定应用之上…', self.choose_application, 'Ctrl+Alt+Shift+A')
         self._action('移动窗口', lambda: self.arm_window_tool('move'))
@@ -320,7 +331,7 @@ class BoardWindow(QGraphicsView):
         self._action('关闭查看器', self.close, 'Ctrl+Q')
         self._action('退出应用', self.controller.quit)
         self._action('操作帮助', self.help)
-        self._action('关于', lambda: QMessageBox.about(self, 'SnipBoard', 'SnipBoard 0.6.1\n标签图片库与作品参考组'))
+        self._action('关于', lambda: QMessageBox.about(self, 'SnipBoard', 'SnipBoard 0.6.2\n标签图片库与作品参考组'))
 
     def update_groups(self):
         self.groups = self.catalog.collection_rows()
@@ -626,6 +637,12 @@ class BoardWindow(QGraphicsView):
                 self.arrange('optimal')
         dialog.deleteLater()
 
+    def toggle_topmost(self):
+        self.set_layer('normal' if self.layer.mode == 'top' else 'top')
+
+    def sync_layer_action(self):
+        self.commands['始终置顶'].setChecked(self.layer.mode == 'top')
+
     def set_layer(self, mode):
         self.layer.set_mode(mode)
         self.catalog.set_setting('board.layer', mode if mode != 'application' else 'normal')
@@ -748,6 +765,8 @@ class BoardWindow(QGraphicsView):
             self.scene_model.clearSelection()
             hit.setSelected(True)
         menu = QMenu(self)
+        menu.addAction(self.commands['始终置顶'])
+        menu.addSeparator()
         background = menu.addMenu('背景')
         for action in self.background_actions.values():
             background.addAction(action)

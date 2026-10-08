@@ -3,7 +3,7 @@ import ctypes
 from ctypes import wintypes
 import os
 
-from PySide6.QtCore import QAbstractNativeEventFilter, QObject, QTimer, Signal
+from PySide6.QtCore import QAbstractNativeEventFilter, QObject, QTimer, Signal, QEvent
 
 
 class NativeHotkey(QAbstractNativeEventFilter):
@@ -40,10 +40,15 @@ class WindowLayer(QObject):
         self.window, self.mode, self.target = window, 'normal', 0
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
+        window.installEventFilter(self)
         if os.name == 'nt':
             self.user = ctypes.WinDLL('user32', use_last_error=True)
             self.user.SetWindowPos.argtypes = (wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
                                                ctypes.c_int, ctypes.c_int, wintypes.UINT)
+            self.user.SetWindowPos.restype = wintypes.BOOL
+            self.get_window_style = getattr(self.user, 'GetWindowLongPtrW', self.user.GetWindowLongW)
+            self.get_window_style.argtypes = (wintypes.HWND, ctypes.c_int)
+            self.get_window_style.restype = ctypes.c_ssize_t
             self.user.GetForegroundWindow.restype = wintypes.HWND
             self.user.IsWindow.argtypes = (wintypes.HWND,)
             self.user.IsIconic.argtypes = (wintypes.HWND,)
@@ -53,9 +58,15 @@ class WindowLayer(QObject):
 
     def set_mode(self, mode, target=0):
         self.mode, self.target = mode, target
-        self.timer.start(300) if mode in ('bottom', 'application') else self.timer.stop()
+        self.timer.start(300) if mode in ('top', 'bottom', 'application') else self.timer.stop()
         self.refresh()
         self.changed.emit()
+
+    def eventFilter(self, watched, event):
+        if watched is self.window and event.type() in (QEvent.Show, QEvent.WinIdChange, QEvent.WindowStateChange):
+            # Qt may recreate/restack the native surface when shown or restored.
+            QTimer.singleShot(0, self.refresh)
+        return super().eventFilter(watched, event)
 
     def _pid(self, handle):
         pid = wintypes.DWORD()
@@ -63,12 +74,16 @@ class WindowLayer(QObject):
         return pid.value
 
     def refresh(self):
-        if os.name != 'nt' or not self.window.isVisible():
+        if os.name != 'nt' or not self.window.isVisible() or self.window.isMinimized():
             return
         handle = int(self.window.winId())
         foreground = self.user.GetForegroundWindow()
         level = -2  # HWND_NOTOPMOST
         if self.mode == 'top':
+            # Repair a lost TOPMOST bit without repeatedly raising an already
+            # topmost viewer above other floating UI or activating it.
+            if self.get_window_style(handle, -20) & 0x00000008:
+                return
             level = -1
         elif self.mode == 'bottom' and foreground != handle:
             level = 1
