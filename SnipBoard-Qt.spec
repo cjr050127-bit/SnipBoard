@@ -3,7 +3,8 @@ from pathlib import Path
 root = Path(SPECPATH)
 a = Analysis(
     [str(root / 'src' / 'snipboard' / 'launcher.py')],
-    pathex=[str(root / 'src')], binaries=[], datas=[],
+    pathex=[str(root / 'src')], binaries=[],
+    datas=[(str(root / 'assets' / 'snipboard.png'), 'assets')],
     hiddenimports=['PySide6.QtNetwork'], hookspath=[], hooksconfig={}, runtime_hooks=[],
     excludes=['tkinter', 'PySide6.QtQml', 'PySide6.QtQuick', 'PySide6.QtTest', 'matplotlib', 'pandas', 'scipy'],
     noarchive=False, optimize=0,
@@ -20,4 +21,4 @@ exe = EXE(
     icon=str(root / 'assets' / 'snipboard.png'),
     version=str(root / 'packaging' / 'version_info_qt.txt'),
 )
-coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='SnipBoard-0.6.2')
+coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='SnipBoard-0.6.3')

@@ -7,7 +7,7 @@ a = Analysis(
     [str(root / "src" / "snipboard" / "launcher.py")],
     pathex=[str(root / "src")],
     binaries=[],
-    datas=[],
+    datas=[(str(root / "assets" / "snipboard.png"), "assets")],
     hiddenimports=["tkinter", "tkinter.ttk"],
     hookspath=[],
     hooksconfig={},

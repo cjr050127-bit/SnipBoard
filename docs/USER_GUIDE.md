@@ -1,4 +1,4 @@
-# SnipBoard 0.6.2 使用手册
+# SnipBoard 0.6.3 使用手册
 
 Windows 本地贴图图片库与参考图查看器。自动同步仅纳入 **Snipaste 贴图图组中的 PNG 图片**；也可手动导入本地图片，不纳入截图历史和 `.sp1` 文件；源文件只读。
 
@@ -103,7 +103,7 @@ python -m venv .venv
 .\build.ps1 -InstallPyInstaller
 ```
 
-产物为 `dist\SnipBoard-0.6.2\SnipBoard.exe`，附 SHA-256。默认运行测试和打包 EXE 自检，包括双界面、推荐、标签、工作组自动收集、旋转布局恢复及缩略图拖动启用状态和预览。
+产物为 `dist\SnipBoard-0.6.3\SnipBoard.exe`，附 SHA-256。默认运行测试和打包 EXE 自检，包括双界面、推荐、标签、工作组自动收集、旋转布局恢复及缩略图拖动启用状态和预览。
 
 ## 验收与边界
 

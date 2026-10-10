@@ -1,6 +1,6 @@
 [project]
 name = "snipboard"
-version = "0.6.2"
+version = "0.6.3"
 description = "Read-only Snipaste discovery and independent image collections"
 requires-python = ">=3.11"
 dependencies = ["PySide6-Essentials>=6.10,<7", "Pillow>=12,<13", "numpy>=2.3,<3"]

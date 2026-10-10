@@ -38,6 +38,13 @@ def configure_app(app):
 
 
 def app_icon():
+    # PyInstaller supplies the same asset under _MEIPASS/assets; source checkouts
+    # resolve it from the repository root. Windows, tray and EXE share one mark.
+    root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[2]))
+    icon = QIcon(str(root / 'assets' / 'snipboard.png'))
+    if not icon.isNull():
+        return icon
+    logging.getLogger(__name__).warning('Brand icon asset is missing; using fallback')
     pixmap = QPixmap(64, 64)
     pixmap.fill(Qt.transparent)
     painter = QPainter(pixmap)
