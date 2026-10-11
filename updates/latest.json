@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "version": "0.6.4",
+  "filename": "SnipBoard-0.6.4-Windows-x64.zip",
+  "size": 63114786,
+  "sha256": "b0980d83bacce1f1ea65ba7d6a38cca70714ab9d26ca37a35c890cffdae314fa",
+  "urls": [
+    "https://snipboard.violet-whale-0649.chatgpt.site/downloads/SnipBoard-0.6.4-Windows-x64.zip",
+    "https://github.com/cjr050127-bit/SnipBoard/releases/download/v0.6.4/SnipBoard-0.6.4-Windows-x64.zip"
+  ],
+  "notes": "# SnipBoard 0.6.4 Preview\n\n更新提醒与软件内下载，让升级少一步折腾。\n\n- 启动后默认后台检查新版：在图库右下角和托盘提醒，不自动弹出窗口打断绘画。\n- 图片库“帮助 → 检查更新／下载新版…”、查看器右击菜单及托盘可手动检查。\n- 更新窗口展示版本说明，支持下载进度、取消和重试；主下载源失败会尝试 GitHub 备用源。\n- 官网增加独立的文件存储下载源，网站和应用共用版本信息及发布包。\n- 下载后验证文件大小和 SHA256；不完整的包不会作为已完成文件保存。\n- 可在设置关闭自动检查，也可跳过某个版本；手动检查仍可看到该版本。\n\n## 更新方式\n\n旧版 0.6.3 及更早版本还没有软件更新入口，请先从官网下载一次 0.6.4。后续版本可在软件内获得提示并下载。\n\n本版仍为便携软件：下载 → 从菜单或托盘退出旧版 → 完整解压到新文件夹 → 运行新版 `SnipBoard.exe`。保留同目录 `_internal` 文件夹。不会自动安装或覆盖运行中的程序。\n\n默认图库位于 `%LOCALAPPDATA%\\SnipBoard\\library`，更换程序目录不会清空图库；自定义图库请继续选择原路径。\n\n## 验证范围\n\n发布前执行完整回归、打包 EXE 自检和 ZIP 文件清单校验；新增验证涵盖版本比较、受信任下载地址、备用源回退、下载大小与哈希、取消清理、跳过版本、关闭自动检查、窗口入口及退出时停止下载。\n\n独立下载源减少对 GitHub 的依赖，不承诺所有地区和运营商的固定速度；保留 GitHub 作为备用下载。\n"
+}

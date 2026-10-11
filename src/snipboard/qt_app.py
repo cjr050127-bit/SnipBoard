@@ -70,6 +70,8 @@ class Controller(QObject):
         self.catalog = Catalog(root)
         self.jobs = Jobs(self)
         self.images = ImageStore(self.jobs, self)
+        from .qt_updates import UpdateService
+        self.updates = UpdateService(self)
         self.windows, self.closed_states = [], []
         self.board, self.tray, self.hotkey = None, None, None
         self.connection_dialog = None
@@ -94,11 +96,20 @@ class Controller(QObject):
                 menu.addAction('参考图查看器  Ctrl+Alt+B', self.show_board)
                 menu.addAction('刷新贴图图组', self.sync)
                 menu.addAction('设置', self.settings)
+                menu.addAction('检查更新…', self.updates.manual_check)
                 menu.addSeparator()
                 menu.addAction('退出应用', self.quit)
                 self.tray.setContextMenu(menu)
                 self.tray.activated.connect(lambda reason: self.new_library() if reason == QSystemTrayIcon.DoubleClick else None)
+                self.tray.messageClicked.connect(self.updates.show)
                 self.tray.show()
+        self.updates.available.connect(self._update_available)
+
+    def _update_available(self, release):
+        if release and self.tray and not self.quitting:
+            self.tray.showMessage('SnipBoard 有更新',
+                                  f'{release.version} Preview 已发布，点击查看并下载。',
+                                  QSystemTrayIcon.Information, 7000)
 
     def new_library(self, state=None):
         from .qt_library import LibraryWindow
@@ -236,6 +247,12 @@ class Controller(QObject):
         auto = QCheckBox('后台自动同步贴图图组（每 5 秒）')
         auto.setChecked(self.auto_sync)
         layout.addWidget(auto)
+        updates = QCheckBox('启动后自动检查软件更新（仅获取版本信息）')
+        updates.setChecked(self.catalog.get_setting('updates.enabled', True))
+        layout.addWidget(updates)
+        update_button = QPushButton('检查更新／下载新版…')
+        update_button.clicked.connect(self.updates.manual_check)
+        layout.addWidget(update_button)
         layout.addWidget(QLabel('相似推荐：本地色彩与构图；无模型下载，无图片上传。'))
         layout.addWidget(QLabel('Ctrl+Alt+B：优先打开当前工作组；未设置时恢复上次标签或参考组。'))
         layout.addWidget(QLabel('当前工作组启用时，每 5 秒检查新增贴图并自动收集。'))
@@ -249,6 +266,7 @@ class Controller(QObject):
         if dialog.exec() == QDialog.Accepted:
             self.auto_sync = auto.isChecked()
             self.catalog.set_setting('auto_sync', self.auto_sync)
+            self.catalog.set_setting('updates.enabled', updates.isChecked())
 
     def diagnostics(self):
         report = self.catalog.get_setting('last_sync', {})
@@ -298,6 +316,7 @@ class Controller(QObject):
         self.quitting = True
         self.timer.stop()
         self.cancel_sync.set()
+        self.updates.shutdown()
         if self.connection_dialog is not None:
             self.connection_dialog.reject()
         states = [w.state() for w in self.windows] or self.closed_states[-8:]
@@ -362,5 +381,6 @@ def run(source: Path | None, library_root: Path):
     else:
         controller.new_library()
     QTimer.singleShot(50, controller.start_connection)
+    QTimer.singleShot(4000, controller.updates.automatic_check)
     app.exec()
     server.close()

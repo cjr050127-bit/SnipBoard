@@ -208,7 +208,25 @@ class LibraryWindow(QMainWindow):
         controller.changed.connect(self.source_changed)
         controller.status.connect(self.statusBar().showMessage)
         self.statusBar().showMessage('贴图图组 · 本地图片库')
+        self.update_button = QPushButton()
+        self.update_button.setObjectName('updateAvailable')
+        self.update_button.clicked.connect(controller.updates.show)
+        self.statusBar().addPermanentWidget(self.update_button)
+        controller.updates.available.connect(self.show_update_available)
+        release = controller.updates.release
+        from . import __version__
+        from .updates import version_tuple
+        if (release and version_tuple(release.version) > version_tuple(__version__) and
+                self.catalog.get_setting('updates.skipped') != release.version):
+            self.show_update_available(release)
+        else:
+            self.show_update_available(None)
         self.refresh()
+
+    def show_update_available(self, release):
+        self.update_button.setVisible(release is not None)
+        if release:
+            self.update_button.setText(f'新版 {release.version} · 查看更新')
 
     def _build(self):
         toolbar = QToolBar(self)
@@ -514,6 +532,7 @@ class LibraryWindow(QMainWindow):
         self.action(settings, '检查图库完整性…', lambda: self.check_integrity(False))
         self.action(settings, '重建缩略图与索引…', lambda: self.check_integrity(True))
         help_menu = self.menuBar().addMenu('帮助')
+        self.action(help_menu, '检查更新／下载新版…', self.controller.updates.manual_check)
         self.action(help_menu, '快捷操作', lambda: QMessageBox.information(self, '快捷操作',
             '单击缩略图：原位放大；Ctrl＋单击多选\n拖缩略图到参考组面板：加入或新建参考组\n拖缩略图到标签面板：加入已有标签\nEsc：返回网格\nCtrl+N：新建图片库窗口\nCtrl+Alt+B：优先打开当前工作组\n查看器 Page Up / Page Down：切换标签或参考组\n图片右下角按住拖动：旋转\n查看器 Alt＋左拖：移动窗口'))
 
