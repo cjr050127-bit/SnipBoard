@@ -332,7 +332,7 @@ class BoardWindow(QGraphicsView):
         self._action('退出应用', self.controller.quit)
         self._action('操作帮助', self.help)
         self._action('检查更新／下载新版…', self.controller.updates.manual_check)
-        self._action('关于', lambda: QMessageBox.about(self, 'SnipBoard', 'SnipBoard 0.6.4\n标签图片库与作品参考组'))
+        self._action('关于', lambda: QMessageBox.about(self, 'SnipBoard', 'SnipBoard 0.6.5\n标签图片库与作品参考组'))
 
     def update_groups(self):
         self.groups = self.catalog.collection_rows()

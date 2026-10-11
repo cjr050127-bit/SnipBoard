@@ -10,6 +10,7 @@ from unittest.mock import patch
 from snipboard.updates import (Release, SITE, REPOSITORY, UpdateError, DownloadCancelled,
                                version_tuple, trusted_url, check_release, download_release,
                                MANIFEST_URLS, _Redirects)
+from snipboard.updates import BLOCK_BYTES
 
 PAYLOAD = b'portable release test' * 20000
 
@@ -26,10 +27,44 @@ def manifest(version='0.6.99'):
 class Response(io.BytesIO):
     def __init__(self, payload=PAYLOAD, size=None):
         super().__init__(payload)
-        self.headers = {'Content-Length': str(len(payload) if size is None else size)}
+        self.status = 206
+        self.headers = {'Content-Length': str(len(payload) if size is None else size),
+                        'Content-Range': f'bytes 0-{len(PAYLOAD)-1}/{len(PAYLOAD)}'}
 
 
 class UpdatesTests(unittest.TestCase):
+    def test_truncated_range_retries_block_and_continues_without_duplicate_bytes(self):
+        payload = b'B' * (BLOCK_BYTES + 4001)
+        data = manifest()
+        data.update(size=len(payload), sha256=hashlib.sha256(payload).hexdigest())
+        release, calls = Release.parse(data), []
+        def opener(url, headers=None):
+            value = headers['Range']
+            start, end = map(int, value.removeprefix('bytes=').split('-'))
+            calls.append((start, end))
+            raw = payload[start:end+1]
+            if len(calls) == 1:
+                raw = raw[:100]
+            response = Response(raw, size=end-start+1)
+            response.headers['Content-Range'] = f'bytes {start}-{end}/{len(payload)}'
+            return response
+        with tempfile.TemporaryDirectory() as directory:
+            result = download_release(release, directory, threading.Event(), opener=opener)
+            self.assertEqual(result.read_bytes(), payload)
+            self.assertEqual(calls, [(0, BLOCK_BYTES-1), (0, BLOCK_BYTES-1), (BLOCK_BYTES, len(payload)-1)])
+
+    def test_incorrect_range_response_falls_back_without_publishing_wrong_bytes(self):
+        release, sources = Release.parse(manifest()), []
+        def opener(url, headers=None):
+            response = Response()
+            if headers:
+                response.headers['Content-Range'] = 'bytes 1-20/400000'
+            return response
+        with tempfile.TemporaryDirectory() as directory:
+            result = download_release(release, directory, threading.Event(), source_changed=sources.append, opener=opener)
+            self.assertEqual(result.read_bytes(), PAYLOAD)
+            self.assertEqual(sources, [0, 1])
+
     def test_version_comparison_is_numeric_and_rejects_invalid(self):
         self.assertGreater(version_tuple('0.6.10'), version_tuple('0.6.9'))
         for value in ['v0.6.4', '0.6', '0.6.4/../file', None, '0.6.4-beta']:
@@ -57,7 +92,7 @@ class UpdatesTests(unittest.TestCase):
 
     def test_manifest_falls_back_and_limits_response_size(self):
         calls = []
-        def opener(url):
+        def opener(url, headers=None):
             calls.append(url)
             return Response(b'x' * 65537 if len(calls) == 1 else json.dumps(manifest()).encode())
         self.assertEqual(check_release(opener=opener).version, '0.6.99')
@@ -74,7 +109,7 @@ class UpdatesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             progress = []
             result = download_release(release, directory, threading.Event(),
-                lambda n, total: progress.append((n, total)), opener=lambda _: Response())
+                lambda n, total: progress.append((n, total)), opener=lambda url, headers=None: Response())
             self.assertEqual(result.read_bytes(), PAYLOAD)
             self.assertEqual(progress[-1], (len(PAYLOAD), len(PAYLOAD)))
             self.assertEqual(len(list(result.parent.iterdir())), 1)
@@ -85,7 +120,7 @@ class UpdatesTests(unittest.TestCase):
     def test_bad_primary_download_is_removed_before_fallback(self):
         release = Release.parse(manifest())
         sources = []
-        def opener(url):
+        def opener(url, headers=None):
             return Response(b'corrupt', size=release.size) if url == release.urls[0] else Response()
         with tempfile.TemporaryDirectory() as directory:
             result = download_release(release, directory, threading.Event(),
@@ -99,7 +134,7 @@ class UpdatesTests(unittest.TestCase):
         data['sha256'] = '0' * 64
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(UpdateError):
-                download_release(Release.parse(data), directory, threading.Event(), opener=lambda _: Response())
+                download_release(Release.parse(data), directory, threading.Event(), opener=lambda url, headers=None: Response())
             self.assertFalse(list(Path(directory).rglob('*.zip')))
             self.assertFalse(list(Path(directory).rglob('*.part')))
 
@@ -112,7 +147,7 @@ class UpdatesTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(DownloadCancelled):
                 download_release(Release.parse(manifest()), directory, cancel, progress,
-                                 sources.append, opener=lambda _: Response())
+                                 sources.append, opener=lambda url, headers=None: Response())
             self.assertEqual(sources, [0])
             self.assertFalse(list(Path(directory).rglob('*.part')))
             self.assertFalse(list(Path(directory).rglob('*.zip')))
@@ -124,7 +159,7 @@ class UpdatesTests(unittest.TestCase):
             destination.parent.mkdir()
             destination.write_bytes(b'keep me')
             with self.assertRaises(UpdateError):
-                download_release(release, directory, threading.Event(), opener=lambda _: Response())
+                download_release(release, directory, threading.Event(), opener=lambda url, headers=None: Response())
             self.assertEqual(destination.read_bytes(), b'keep me')
 
 
@@ -181,7 +216,7 @@ class UpdateUITests(unittest.TestCase):
 
     def test_download_buttons_completion_and_open_folder(self):
         self.service.downloader = lambda release, root, cancel, progress, source: download_release(
-            release, root, cancel, progress, source, opener=lambda _: Response())
+            release, root, cancel, progress, source, opener=lambda url, headers=None: Response())
         self.service.manual_check()
         test_qt.drain(self.controller)
         dialog = self.service.dialog

@@ -18,6 +18,7 @@ MANIFEST_URLS = (SITE + '/updates/latest.json',
                  'https://raw.githubusercontent.com/cjr050127-bit/SnipBoard/main/updates/latest.json')
 MAX_BYTES = 512 * 1024 * 1024
 TIMEOUT = 12
+BLOCK_BYTES = 4 * 1024 * 1024
 
 
 class UpdateError(Exception):
@@ -59,10 +60,10 @@ class _Redirects(HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def open_url(url):
+def open_url(url, *, headers=None):
     trusted_url(url)
     response = build_opener(_Redirects()).open(
-        Request(url, headers={'User-Agent': 'SnipBoard-Updater', 'Accept-Encoding': 'identity'}), timeout=TIMEOUT)
+        Request(url, headers={'User-Agent': 'SnipBoard-Updater', 'Accept-Encoding': 'identity', **(headers or {})}), timeout=TIMEOUT)
     try:
         trusted_url(response.geturl(), redirect=True)
     except Exception:
@@ -146,6 +147,49 @@ def _digest(path, cancel):
     return value.hexdigest()
 
 
+def _download_blocks(url, release, output, cancel, progress, opener):
+    """Bounded range requests survive proxies that truncate large responses."""
+    digest = hashlib.sha256()
+    for offset in range(0, release.size, BLOCK_BYTES):
+        end = min(offset + BLOCK_BYTES, release.size) - 1
+        expected = end - offset + 1
+        for attempt in range(2):
+            _cancelled(cancel)
+            try:
+                with opener(url, headers={'Range': f'bytes={offset}-{end}'}) as response:
+                    if (response.status != 206 or response.headers.get('Content-Range') !=
+                            f'bytes {offset}-{end}/{release.size}'):
+                        raise UpdateError('服务器未正确返回下载分段')
+                    declared = response.headers.get('Content-Length')
+                    if declared is not None and int(declared) != expected:
+                        raise UpdateError('下载分段大小不匹配')
+                    parts, received = [], 0
+                    while True:
+                        _cancelled(cancel)
+                        chunk = response.read(min(256 * 1024, expected - received + 1))
+                        if not chunk:
+                            break
+                        received += len(chunk)
+                        if received > expected:
+                            raise UpdateError('下载分段超过预期大小')
+                        parts.append(chunk)
+                        progress(offset + received, release.size)
+                    if received != expected:
+                        raise UpdateError('下载分段不完整')
+                    block = b''.join(parts)
+                _cancelled(cancel)
+                break
+            except DownloadCancelled:
+                raise
+            except Exception:
+                if attempt:
+                    raise
+                progress(offset, release.size)
+        output.write(block)
+        digest.update(block)
+    return release.size, digest.hexdigest()
+
+
 def download_release(release, root, cancel, progress=lambda received, total: None,
                      source_changed=lambda index: None, opener=open_url):
     # Each release gets an app-owned directory; never extract over the running app.
@@ -167,26 +211,31 @@ def download_release(release, root, cancel, progress=lambda received, total: Non
         handle, name = tempfile.mkstemp(prefix='.snipboard-', suffix='.part', dir=folder)
         temporary = Path(name)
         try:
-            with os.fdopen(handle, 'wb') as output, opener(url) as response:
-                declared = response.headers.get('Content-Length')
-                if declared is not None and int(declared) != release.size:
-                    raise UpdateError('服务器返回的文件大小不匹配')
+            with os.fdopen(handle, 'wb') as output:
                 progress(0, release.size)
-                while True:
-                    _cancelled(cancel)
-                    chunk = response.read(256 * 1024)
-                    if not chunk:
-                        break
-                    received += len(chunk)
-                    if received > release.size:
-                        raise UpdateError('下载文件超过预期大小')
-                    output.write(chunk)
-                    digest.update(chunk)
-                    progress(received, release.size)
+                if urlsplit(url).hostname == urlsplit(SITE).hostname:
+                    received, actual_hash = _download_blocks(url, release, output, cancel, progress, opener)
+                else:
+                    with opener(url) as response:
+                        declared = response.headers.get('Content-Length')
+                        if declared is not None and int(declared) != release.size:
+                            raise UpdateError('服务器返回的文件大小不匹配')
+                        while True:
+                            _cancelled(cancel)
+                            chunk = response.read(256 * 1024)
+                            if not chunk:
+                                break
+                            received += len(chunk)
+                            if received > release.size:
+                                raise UpdateError('下载文件超过预期大小')
+                            output.write(chunk)
+                            digest.update(chunk)
+                            progress(received, release.size)
+                    actual_hash = digest.hexdigest()
                 output.flush()
                 os.fsync(output.fileno())
             _cancelled(cancel)
-            if received != release.size or digest.hexdigest() != release.sha256:
+            if received != release.size or actual_hash != release.sha256:
                 raise UpdateError('下载文件不完整或 SHA256 校验失败')
             # rename does not overwrite an existing destination on Windows.
             if destination.exists():
