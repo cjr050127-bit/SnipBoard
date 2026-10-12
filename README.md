@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/snipboard.png?v=0.6.5" width="88" alt="SnipBoard"></p>
+<p align="center"><img src="assets/snipboard.png?v=0.6.6" width="88" alt="SnipBoard"></p>
 
 # SnipBoard
 
@@ -6,11 +6,18 @@
 
 Windows 本地图片整理工具，提供图片库和自由参考图画布。支持读取 Snipaste 已保存的贴图、手动导入图片，通过标签、颜色和尺寸寻找素材，再将它们紧凑排列到参考组中。
 
-**当前最新版本：0.6.5 Preview · Windows x64 · 中文界面**
+**当前最新版本：0.6.6 Preview · Windows x64 · 中文界面**
 
-[官网下载](https://snipboard.violet-whale-0649.chatgpt.site/#download) · [GitHub 备用](https://github.com/cjr050127-bit/SnipBoard/releases/tag/v0.6.5) · [使用手册](docs/USER_GUIDE.md) · [更新记录](docs/RELEASE_0_6_5.md) · [问题反馈](https://github.com/cjr050127-bit/SnipBoard/issues)
+[国内下载](https://cnb.cool/snipbroad-jrc/SnipBoard/-/releases/tag/v0.6.6) · [GitHub 备用](https://github.com/cjr050127-bit/SnipBoard/releases/tag/v0.6.6) · [使用手册](docs/USER_GUIDE.md) · [更新记录](docs/RELEASE_0_6_6.md) · [问题反馈](https://github.com/cjr050127-bit/SnipBoard/issues)
 
 > SnipBoard 是独立个人项目。Snipaste 是可选来源；不安装 Snipaste 也能导入和整理本地图片。本仓库展示当前完成版本，仍保留 Preview 标识。
+
+## 0.6.6：国内介绍、下载与软件内更新入口
+
+- [国内项目主页](https://cnb.cool/snipbroad-jrc/SnipBoard)展示产品截图、说明和使用手册，公开版本附件提供 Windows 下载。
+- 软件内更新优先连接 CNB，GitHub 备用；保留分段下载、取消和完整 SHA256 校验。
+- 0.6.5 及更早版本没有内置信任新的 CNB 域名，国内用户先从本页手动下载一次 0.6.6；图库保持原路径。
+- 本方案使用免费项目主页，暂不提供原自定义网页的翻牌效果或 CNB 实时下载数量。
 
 ## 0.6.5：下载更稳，更新更轻松
 
@@ -85,13 +92,13 @@ Windows 本地图片整理工具，提供图片库和自由参考图画布。支
 
 ## 下载与开始使用
 
-1. 打开 [官网下载页](https://snipboard.violet-whale-0649.chatgpt.site/#download)（[GitHub 备用](https://github.com/cjr050127-bit/SnipBoard/releases/tag/v0.6.5)），下载 **SnipBoard-0.6.5-Windows-x64.zip**。GitHub 自动生成的 `Source code` 是源码，不是可运行便携包。
+1. 打开 [国内下载页](https://cnb.cool/snipbroad-jrc/SnipBoard/-/releases/tag/v0.6.6)（[GitHub 备用](https://github.com/cjr050127-bit/SnipBoard/releases/tag/v0.6.6)），下载 **SnipBoard-0.6.6-Windows-x64.zip**。GitHub 自动生成的 `Source code` 是源码，不是可运行便携包。
 2. 完整解压至有写入权限的普通文件夹；保留 `SnipBoard.exe` 旁的 `_internal` 文件夹，不要只拖出 EXE。
 3. 双击 `SnipBoard.exe`。无需 Python；当前提供 Windows x64 包，建议使用 Windows 10/11 64 位，干净系统兼容性尚待更多实测。应用尚未代码签名；如果系统提示未知发布者，请核对下载来源和校验值。
 4. 首次连接会查找 Snipaste，唯一来源自动连接，多来源供选择；也可选择“暂时跳过”，用 **Ctrl+O** 导入本地图片。
 5. 拖图片到右侧建立参考组；打开参考图查看器，调整窗口大小后按 **Ctrl+P** 紧凑排列。
 
-SHA-256 校验文件与 ZIP 一起提供。在 PowerShell 中运行 `Get-FileHash .\SnipBoard-0.6.5-Windows-x64.zip -Algorithm SHA256`，与同页 `.sha256` 文件比较。
+SHA-256 校验文件与 ZIP 一起提供。在 PowerShell 中运行 `Get-FileHash .\SnipBoard-0.6.6-Windows-x64.zip -Algorithm SHA256`，与同页 `.sha256` 文件比较。
 
 ## 常用操作
 
@@ -119,11 +126,11 @@ SHA-256 校验文件与 ZIP 一起提供。在 PowerShell 中运行 `Get-FileHas
 
 ## 版本与验证范围
 
-0.6.5 新增更新提醒、软件内下载与官网独立下载源；0.6.3 统一项目与桌面程序图标；0.6.2 将查看器默认设为始终置顶，并增加右击与快捷键开关；0.6.1 新增单图标签取消；0.6.0 将固定侧栏改为八个可停靠面板，并保存各窗口的面板布局。紧凑拼版延续 0.5.5 的算法与默认 3 px 间距。
+0.6.6 接入 CNB 国内下载与更新源；0.6.5 新增分段下载；0.6.4 新增更新提醒与软件内下载；0.6.3 统一项目与桌面程序图标；0.6.2 将查看器默认设为始终置顶，并增加右击与快捷键开关；0.6.1 新增单图标签取消；0.6.0 将固定侧栏改为八个可停靠面板，并保存各窗口的面板布局。紧凑拼版延续 0.5.5 的算法与默认 3 px 间距。
 
 ![合成数据的紧凑拼版对比](docs/images/packing.png)
 
-发布准备期间完整回归 **141 项测试通过**。既有验收覆盖原生隐藏窗口、旋转、布局恢复及高 DPI；真实多显示器动态 DPI、睡眠恢复、万张真实图片性能和干净 Windows 环境仍待实测。详细数据见 [0.6.5 更新记录](docs/RELEASE_0_6_5.md)。
+0.6.6 发布准备期间完整回归 **144 项测试通过**，包含 CNB 来源、签名跳转与旧源兼容护栏。既有验收覆盖原生隐藏窗口、旋转、布局恢复及高 DPI；真实多显示器动态 DPI、睡眠恢复、万张真实图片性能和干净 Windows 环境仍待实测。当前验证与升级说明见 [0.6.6 更新记录](docs/RELEASE_0_6_6.md)。
 
 ## 从源码运行
 
@@ -139,7 +146,7 @@ python -m venv .venv
 .\build.ps1 -InstallPyInstaller
 ```
 
-构建输出位于 `dist/SnipBoard-0.6.5/`。打包和公开分发还需携带第三方许可及对应库源码，见 [依赖说明](THIRD_PARTY_NOTICES.md)。
+构建输出位于 `dist/SnipBoard-0.6.6/`。打包和公开分发还需携带第三方许可及对应库源码，见 [依赖说明](THIRD_PARTY_NOTICES.md)。
 
 ## 支持这个个人项目
 

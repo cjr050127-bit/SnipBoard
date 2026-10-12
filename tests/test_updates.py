@@ -6,8 +6,9 @@ import tempfile
 import threading
 import unittest
 from unittest.mock import patch
+from urllib.request import Request
 
-from snipboard.updates import (Release, SITE, REPOSITORY, UpdateError, DownloadCancelled,
+from snipboard.updates import (Release, SITE, LEGACY_SITE, REPOSITORY, UpdateError, DownloadCancelled,
                                version_tuple, trusted_url, check_release, download_release,
                                MANIFEST_URLS, _Redirects)
 from snipboard.updates import BLOCK_BYTES
@@ -19,7 +20,7 @@ def manifest(version='0.6.99'):
     name = f'SnipBoard-{version}-Windows-x64.zip'
     return {'schema': 1, 'version': version, 'filename': name, 'size': len(PAYLOAD),
             'sha256': hashlib.sha256(PAYLOAD).hexdigest(),
-            'urls': [SITE + '/downloads/' + name,
+            'urls': [SITE + f'/-/releases/download/v{version}/' + name,
                      REPOSITORY + f'/releases/download/v{version}/' + name],
             'notes': '测试更新说明'}
 
@@ -33,6 +34,52 @@ class Response(io.BytesIO):
 
 
 class UpdatesTests(unittest.TestCase):
+    def test_cnb_is_preferred_manifest_and_legacy_release_remains_usable(self):
+        self.assertEqual(MANIFEST_URLS[0], SITE + '/-/git/raw/main/updates/latest.json')
+        data = manifest()
+        data['urls'][0] = LEGACY_SITE + '/downloads/' + data['filename']
+        release = Release.parse(data)
+        calls = []
+        def opener(url, headers=None):
+            calls.append((url, headers))
+            return Response()
+        with tempfile.TemporaryDirectory() as directory:
+            result = download_release(release, directory, threading.Event(), opener=opener)
+            self.assertEqual(result.read_bytes(), PAYLOAD)
+        self.assertEqual(calls[0][1], {'Range': f'bytes=0-{len(PAYLOAD)-1}'})
+
+    def test_cnb_manifest_rejects_other_projects_mismatched_versions_and_asset_urls(self):
+        valid = manifest()['urls'][0]
+        for url in [valid.replace('/snipbroad-jrc/', '/someone-else/'),
+                    valid.replace('/SnipBoard/', '/OtherProject/'),
+                    valid.replace('/v0.6.99/', '/v0.6.98/'),
+                    valid.replace('/v0.6.99/', '/main/'),
+                    valid + '?token=unexpected', valid + '#fragment',
+                    valid.replace('cnb.cool', 'cnb.cool:444'),
+                    valid.replace('cnb.cool', 'cnb.cool:invalid'),
+                    valid.replace('cnb.cool', 'user@cnb.cool'),
+                    'https://asset.cnb.cool/unverified/package.zip']:
+            data = manifest()
+            data['urls'] = [url]
+            with self.assertRaises(UpdateError, msg=url):
+                Release.parse(data)
+
+    def test_cnb_asset_redirect_retains_range_and_rejects_other_asset_hosts(self):
+        request = Request(manifest()['urls'][0], headers={'Range': 'bytes=0-99'})
+        asset = 'https://asset.cnb.cool/releases/test.zip?signature=abc'
+        redirected = _Redirects().redirect_request(request, None, 302, '', {}, asset)
+        self.assertEqual(redirected.full_url, asset)
+        self.assertEqual(redirected.get_header('Range'), 'bytes=0-99')
+        with self.assertRaises(UpdateError):
+            trusted_url(asset)
+        for url in [asset.replace('asset.cnb.cool', 'asset.cnb.cool.evil.example'),
+                    asset.replace('asset.cnb.cool', 'other.cnb.cool'),
+                    asset.replace('https://', 'http://'),
+                    asset.replace('asset.cnb.cool', 'user@asset.cnb.cool'),
+                    asset.replace('asset.cnb.cool', 'asset.cnb.cool:444')]:
+            with self.assertRaises(UpdateError):
+                _Redirects().redirect_request(request, None, 302, '', {}, url)
+
     def test_truncated_range_retries_block_and_continues_without_duplicate_bytes(self):
         payload = b'B' * (BLOCK_BYTES + 4001)
         data = manifest()
@@ -74,14 +121,14 @@ class UpdatesTests(unittest.TestCase):
     def test_manifest_rejects_paths_untrusted_sources_and_missing_hash(self):
         for field, value in [('filename', '../update.exe'), ('size', True), ('size', -1),
                              ('sha256', ''), ('urls', ['https://example.com/update.zip']),
-                             ('urls', [SITE + '/downloads/wrong.zip']), ('notes', '<x>' * 5000)]:
+                             ('urls', [SITE + '/-/releases/download/v0.6.99/wrong.zip']), ('notes', '<x>' * 5000)]:
             data = manifest()
             data[field] = value
             with self.assertRaises(UpdateError, msg=field):
                 Release.parse(data)
 
     def test_url_guard_rejects_credentials_plain_http_and_wrong_repository(self):
-        for url in ['http://github.com/x', 'file:///tmp/update', SITE.replace('https://', 'https://x@') + '/updates/latest.json',
+        for url in ['http://github.com/x', 'file:///tmp/update', SITE.replace('https://', 'https://x@') + '/-/git/raw/main/updates/latest.json',
                     'https://github.com/other/repo/releases/download/v1/a.zip',
                     'https://raw.githubusercontent.com/other/repo/main/updates/latest.json']:
             with self.assertRaises(UpdateError):
