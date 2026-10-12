@@ -1,12 +1,12 @@
 {
   "schema": 1,
-  "version": "0.6.5",
-  "filename": "SnipBoard-0.6.5-Windows-x64.zip",
-  "size": 63117060,
-  "sha256": "3ca996847f3fc3459cbea27c4d9af16e6ed6b1174e88849ebece88555111fab8",
+  "version": "0.6.6",
+  "filename": "SnipBoard-0.6.6-Windows-x64.zip",
+  "size": 63119270,
+  "sha256": "f009cf69e57f50dc2fb44b3157777efd49b6cfda42b81a597dc9258919fe6c22",
   "urls": [
-    "https://snipboard.violet-whale-0649.chatgpt.site/downloads/SnipBoard-0.6.5-Windows-x64.zip",
-    "https://github.com/cjr050127-bit/SnipBoard/releases/download/v0.6.5/SnipBoard-0.6.5-Windows-x64.zip"
+    "https://cnb.cool/snipbroad-jrc/SnipBoard/-/releases/download/v0.6.6/SnipBoard-0.6.6-Windows-x64.zip",
+    "https://github.com/cjr050127-bit/SnipBoard/releases/download/v0.6.6/SnipBoard-0.6.6-Windows-x64.zip"
   ],
-  "notes": "# SnipBoard 0.6.5 Preview\n\n更新提醒、软件内下载与更稳的官网下载源。\n\n- 启动后后台检查新版，在图片库右下角与托盘提醒；不自动弹窗打断画画。\n- 帮助菜单、查看器右击菜单与托盘可查看更新说明并下载。设置中可关闭自动检查，也可跳过某个版本。\n- 官网和应用优先使用独立的 R2 下载源，采用 4 MB 分段请求；中断分段可重试，避免部分网络代理截断大文件。\n- 显示下载进度、支持取消，完整下载后核对大小与 SHA256，连接失败可使用 GitHub 备用。\n- 官网新增两源下载统计和翻牌计数；“第 xx 位使用者”按累计下载次数估算，非独立用户或成功安装数。\n\n## 升级\n\n0.6.4 用户可在“帮助 → 检查更新／下载新版…”取得本版。0.6.3 及更早版本需要先从官网下载一次新版。\n\n便携更新：下载 → 从菜单或托盘退出旧版 → 完整解压到新文件夹 → 运行新版 `SnipBoard.exe`。保留 `_internal` 文件夹。默认图库保存在 `%LOCALAPPDATA%\\SnipBoard\\library`，更换程序目录不会清空图库；自定义图库继续选择原路径。\n\n## 验证\n\n141 项完整回归通过，覆盖更新提醒、取消、退出、版本跳过、关闭自动检查、哈希校验、分段截断重试与错误范围回退；发布包另执行 EXE 自检和文件清单校验。\n\n官网下载源已实测完整下载并通过 SHA256 校验。实际速度受网络影响，保留 GitHub 备用；应用不自动执行或覆盖运行中的 EXE。\n"
+  "notes": "# SnipBoard 0.6.6 Preview\n\n国内介绍与下载入口迁移到腾讯 CNB，同时将软件内更新接入 CNB。\n\n- 产品介绍、截图、使用手册和 Windows ZIP 使用公开 CNB 项目与 Release 附件提供，无需购买域名或服务器。\n- 软件启动后台检查、手动检查和软件内下载优先使用 CNB，GitHub 保留备用。\n- CNB 下载使用固定版本链接；允许跳转到 CNB 的 `asset.cnb.cool` 文件服务，继续验证大小、SHA256 和分段范围。\n- 保留更新进度、取消、版本跳过和关闭自动检查；本版不改变图库结构。\n\n## 升级\n\n0.6.5 及更早版本没有内置信任新的 CNB 下载域名，国内用户请先从 CNB 手动下载一次 0.6.6；以后可通过本版的软件内更新获取新版本。\n\n下载 → 从菜单或托盘退出旧版 → 完整解压到新文件夹 → 运行新版 `SnipBoard.exe`。保留 `_internal` 文件夹。默认图库位于 `%LOCALAPPDATA%\\SnipBoard\\library`，更换软件目录不会清空图库；自定义图库继续选择原路径。\n\n## 验证\n\n完整回归 144 项通过，覆盖 CNB 版本与文件名匹配、第三方地址拒绝、签名重定向保留 Range、旧源兼容、下载校验、取消和更新窗口。\n\n## 免费入口的范围\n\n国内入口是 CNB 的公开项目介绍页与版本下载页。原自定义网页继续保留，但不作为国内唯一下载入口。CNB 项目介绍页不能运行原官网的翻牌脚本，公开附件接口当前也未提供可用的实时下载量字段，暂时不显示 CNB 实时下载数或双源总数。\n\n网络可用性和速度仍因地区、运营商而异；发布时核对匿名访问、完整下载及 SHA256。程序不自动执行下载包，不覆盖运行中的 EXE。\n"
 }

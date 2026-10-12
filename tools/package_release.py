@@ -24,7 +24,7 @@ sha = hashlib.sha256(target.read_bytes()).hexdigest()
 Path(str(target) + '.sha256').write_text(sha + '  ' + target.name + '\n', encoding='ascii')
 data = {'schema': 1, 'version': __version__, 'filename': target.name,
         'size': target.stat().st_size, 'sha256': sha,
-        'urls': [SITE + '/downloads/' + target.name,
+        'urls': [SITE + f'/-/releases/download/v{__version__}/' + target.name,
                  REPOSITORY + f'/releases/download/v{__version__}/' + target.name],
         'notes': (root / 'docs' / f"RELEASE_{__version__.replace('.', '_')}.md").read_text(encoding='utf-8')}
 Release.parse(data)

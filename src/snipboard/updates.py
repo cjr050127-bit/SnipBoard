@@ -12,9 +12,11 @@ import threading
 from urllib.parse import urlsplit
 from urllib.request import build_opener, HTTPRedirectHandler, Request
 
-SITE = 'https://snipboard.violet-whale-0649.chatgpt.site'
+SITE = 'https://cnb.cool/snipbroad-jrc/SnipBoard'
+LEGACY_SITE = 'https://snipboard.violet-whale-0649.chatgpt.site'
 REPOSITORY = 'https://github.com/cjr050127-bit/SnipBoard'
-MANIFEST_URLS = (SITE + '/updates/latest.json',
+CNB_PATH = '/snipbroad-jrc/SnipBoard'
+MANIFEST_URLS = (SITE + '/-/git/raw/main/updates/latest.json',
                  'https://raw.githubusercontent.com/cjr050127-bit/SnipBoard/main/updates/latest.json')
 MAX_BYTES = 512 * 1024 * 1024
 TIMEOUT = 12
@@ -38,17 +40,28 @@ def version_tuple(value):
 def trusted_url(url, *, redirect=False):
     if not isinstance(url, str):
         raise UpdateError('下载地址不正确')
-    parsed = urlsplit(url)
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except ValueError as error:
+        raise UpdateError('下载地址不正确') from error
     if (parsed.scheme != 'https' or parsed.username or parsed.password or
-            parsed.port not in (None, 443) or parsed.fragment):
+            port not in (None, 443) or parsed.fragment):
         raise UpdateError('更新源必须使用受信任的 HTTPS 地址')
     host = parsed.hostname
     path = parsed.path
-    allowed = (host == urlsplit(SITE).hostname and path.startswith(('/downloads/', '/updates/')) or
-               host == 'github.com' and path.startswith('/cjr050127-bit/SnipBoard/releases/download/') or
+    release_path = r'v(?P<version>\d{1,4}\.\d{1,4}\.\d{1,4})/SnipBoard-(?P=version)-Windows-x64\.zip'
+    allowed = (host == 'cnb.cool' and (path == CNB_PATH + '/-/git/raw/main/updates/latest.json' or
+               re.fullmatch(re.escape(CNB_PATH + '/-/releases/download/') + release_path, path)) or
+               host == urlsplit(LEGACY_SITE).hostname and (path == '/updates/latest.json' or
+               re.fullmatch(r'/downloads/SnipBoard-\d{1,4}\.\d{1,4}\.\d{1,4}-Windows-x64\.zip', path)) or
+               host == 'github.com' and re.fullmatch(r'/cjr050127-bit/SnipBoard/releases/download/' + release_path, path) or
                host == 'raw.githubusercontent.com' and path == '/cjr050127-bit/SnipBoard/main/updates/latest.json')
-    if redirect and host == 'release-assets.githubusercontent.com':
+    asset_redirect = redirect and host in ('asset.cnb.cool', 'release-assets.githubusercontent.com')
+    if asset_redirect:
         allowed = True
+    if parsed.query and not asset_redirect:
+        allowed = False
     if not allowed:
         raise UpdateError('更新源地址不在允许的范围内')
     return url
@@ -101,7 +114,9 @@ class Release:
         for url in urls:
             trusted_url(url)
             parts = urlsplit(url)
-            if parts.hostname == urlsplit(SITE).hostname:
+            if parts.hostname == 'cnb.cool':
+                expected = f'{CNB_PATH}/-/releases/download/v{version}/{filename}'
+            elif parts.hostname == urlsplit(LEGACY_SITE).hostname:
                 expected = '/downloads/' + filename
             elif parts.hostname == 'github.com':
                 expected = f'/cjr050127-bit/SnipBoard/releases/download/v{version}/{filename}'
@@ -213,7 +228,7 @@ def download_release(release, root, cancel, progress=lambda received, total: Non
         try:
             with os.fdopen(handle, 'wb') as output:
                 progress(0, release.size)
-                if urlsplit(url).hostname == urlsplit(SITE).hostname:
+                if urlsplit(url).hostname in ('cnb.cool', urlsplit(LEGACY_SITE).hostname):
                     received, actual_hash = _download_blocks(url, release, output, cancel, progress, opener)
                 else:
                     with opener(url) as response:
