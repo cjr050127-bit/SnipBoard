@@ -1,6 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
+import re
 root = Path(SPECPATH)
+version = re.search(r'__version__\s*=\s*"(\d+\.\d+\.\d+)"',
+                    (root / 'src' / 'snipboard' / '__init__.py').read_text(encoding='utf-8')).group(1)
 a = Analysis(
     [str(root / 'src' / 'snipboard' / 'launcher.py')],
     pathex=[str(root / 'src')], binaries=[],
@@ -21,4 +24,4 @@ exe = EXE(
     icon=str(root / 'assets' / 'snipboard.png'),
     version=str(root / 'packaging' / 'version_info_qt.txt'),
 )
-coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='SnipBoard-0.6.6')
+coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='SnipBoard-' + version)

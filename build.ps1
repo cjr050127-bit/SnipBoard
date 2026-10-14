@@ -7,6 +7,11 @@ if (-not (Test-Path -LiteralPath $python)) { throw '请先创建 .venv 并安装
 Push-Location $project
 try {
     $env:PYTHONPATH = Join-Path $project 'src'
+    $releaseVersion = (& $python -c 'from snipboard import __version__; print(__version__)').Trim()
+    if ($LASTEXITCODE -ne 0 -or $releaseVersion -notmatch '^\d+\.\d+\.\d+$') { throw '无法读取合法版本号。' }
+    $releaseDirectory = [IO.Path]::GetFullPath((Join-Path $project ('dist/SnipBoard-' + $releaseVersion)))
+    $allowedDist = [IO.Path]::GetFullPath((Join-Path $project 'dist')) + [IO.Path]::DirectorySeparatorChar
+    if (-not $releaseDirectory.StartsWith($allowedDist, [StringComparison]::OrdinalIgnoreCase)) { throw '拒绝越界构建目录。' }
     if (-not $SkipTests) {
         & $python -m unittest discover -s tests -q
         if ($LASTEXITCODE -ne 0) { throw '测试失败，停止打包。' }
@@ -20,7 +25,7 @@ try {
     $env:PATH = @((Join-Path $env:SystemRoot 'System32'), $env:SystemRoot, (Split-Path $python)) -join ';'
     & $python -m PyInstaller --noconfirm --clean SnipBoard-Qt.spec
     if ($LASTEXITCODE -ne 0) { throw '打包失败。' }
-    $exe = Join-Path $project 'dist\SnipBoard-0.6.6\SnipBoard.exe'
+    $exe = Join-Path $releaseDirectory 'SnipBoard.exe'
     $selfTestRoot = Join-Path $project ('build\qt-selftest-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $selfTestRoot | Out-Null
     try {
@@ -38,12 +43,12 @@ try {
         if (Test-Path -LiteralPath $resolved) { Remove-Item -LiteralPath $resolved -Recurse -Force }
     }
     $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
-    Set-Content -LiteralPath (Join-Path $project 'dist\SnipBoard-0.6.6\SHA256SUMS.txt') -Value "$hash *SnipBoard.exe" -Encoding ascii
+    Set-Content -LiteralPath (Join-Path $releaseDirectory 'SHA256SUMS.txt') -Value "$hash *SnipBoard.exe" -Encoding ascii
     $releaseDirectory = Split-Path $exe
     Copy-Item -LiteralPath (Join-Path $project 'README.md') -Destination (Join-Path $releaseDirectory '使用说明.md')
     $releaseDocs = Join-Path $releaseDirectory 'docs'
     New-Item -ItemType Directory -Path $releaseDocs -Force | Out-Null
-    foreach ($name in @('RELEASE_0_6_6.md', 'RELEASE_0_6_5.md', 'RELEASE_0_6_4.md', 'USER_GUIDE.md', 'PRIVACY.md', 'COMPATIBILITY_AND_LEGAL.md', 'DEPENDENCY_SOURCES.json', 'RELEASE_0_6_3.md', 'RELEASE_0_6_2.md', 'RELEASE_0_6_1.md', 'RELEASE_0_6_0.md', 'RELEASE_0_5_5.md')) {
+    foreach ($name in @('RELEASE_7_0_0.md', 'FINDER_GUIDE.md', 'RELEASE_0_6_6.md', 'RELEASE_0_6_5.md', 'RELEASE_0_6_4.md', 'USER_GUIDE.md', 'PRIVACY.md', 'COMPATIBILITY_AND_LEGAL.md', 'DEPENDENCY_SOURCES.json', 'RELEASE_0_6_3.md', 'RELEASE_0_6_2.md', 'RELEASE_0_6_1.md', 'RELEASE_0_6_0.md', 'RELEASE_0_5_5.md')) {
         Copy-Item -LiteralPath (Join-Path $project ('docs/' + $name)) -Destination $releaseDocs
     }
     Copy-Item -LiteralPath (Join-Path $project 'docs/images') -Destination $releaseDocs -Recurse -Force

@@ -159,6 +159,78 @@ def main(argv: list[str] | None = None) -> int:
         if board.glow_active() or board.backgroundBrush().color().name() != '#ffffff':
             raise RuntimeError('GUI self-test background switching failed')
         board.set_background('black')
+        window.clear_filters()
+        drain()
+        window.finder_panel.query.setPlainText('找横图')
+        window.finder_panel.submit()
+        drain()
+        if not window.rows or any(row['width'] / row['height'] <= 1.05 for row in window.rows):
+            raise RuntimeError('GUI self-test natural-language filtering failed')
+        from snipboard.qt_model_settings import ModelSettingsDialog
+        from snipboard.model_search import ModelConfig, ModelSearchResult
+        import snipboard.qt_library as library_module
+        settings = ModelSettingsDialog(window)
+        if settings.consent.isChecked() or settings.apply_button.isEnabled() or settings.grab().isNull():
+            raise RuntimeError('GUI self-test model settings failed')
+        settings.reject()
+        selected_row = dict(window.rows[0])
+        model_calls = []
+        def simulated_model(catalog, plan, query, config, cancel, **scope):
+            model_calls.append(query)
+            return ModelSearchResult([selected_row], 1, 4, 1,
+                reasons={selected_row['digest']: '模型接口自检结果'})
+        original_model = library_module.search_with_model
+        try:
+            library_module.search_with_model = simulated_model
+            window.finder_model_config = ModelConfig('http://localhost:11434/v1', 'self-test-vision')
+            window.finder_panel.set_model(window.finder_model_config)
+            window.finder_panel.mode.setCurrentIndex(1)
+            window.finder_panel.query.setPlainText('未标注的侧脸朝左')
+            window.finder_panel.submit()
+            drain()
+            if (len(model_calls) != 1 or len(window.rows) != 1 or not window.finder_applied_model or
+                    '已分析 1 / 4' not in window.summary.text()):
+                raise RuntimeError('GUI self-test optional model flow failed')
+        finally:
+            library_module.search_with_model = original_model
+        window.clear_finder()
+        drain()
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix='folder-selftest-', dir=library_root.parent) as temporary:
+            reference = Path(temporary) / '文件夹参考'
+            nested = reference / '子文件夹'
+            nested.mkdir(parents=True)
+            Image.new('RGB', (77, 95), '#449887').save(reference / 'first.jpg')
+            Image.new('RGB', (95, 77), '#987744').save(nested / 'second.png')
+            report = controller.catalog.import_folder(reference)
+            if report['added'] != 2 or report['errors'] or not report['label_id']:
+                raise RuntimeError('GUI self-test folder import failed')
+            controller.changed.emit()
+            window.select_group(report['label_id'])
+            drain()
+            if len(window.rows) != 2 or any('文件夹参考' not in row['manual_tags'] for row in window.rows):
+                raise RuntimeError('GUI self-test folder label group failed')
+        if os.name == 'nt':
+            import errno
+            from snipboard.atomic_io import replace_local_file
+            with tempfile.TemporaryDirectory(prefix='atomic-selftest-', dir=library_root) as temporary:
+                stage = Path(temporary) / 'stage.tmp'
+                target = stage.with_name('published.bin')
+                stage.write_bytes(b'atomic publication self-test')
+                original_replace = os.replace
+                attempts = []
+                def cross_volume_once(source, destination):
+                    attempts.append((source, destination))
+                    if len(attempts) == 1:
+                        raise OSError(errno.EXDEV, 'Simulated Windows path redirection')
+                    return original_replace(source, destination)
+                try:
+                    os.replace = cross_volume_once
+                    replace_local_file(stage, target)
+                finally:
+                    os.replace = original_replace
+                if len(attempts) != 2 or target.read_bytes() != b'atomic publication self-test':
+                    raise RuntimeError('GUI self-test redirected file publication failed')
         controller.quit()
         drain()
         controller._finish_shutdown()

@@ -26,7 +26,7 @@ class UpdateService(QObject):
         self.root = Path(root) if root else app_data_root() / 'downloads'
         self.release = self.path = self.dialog = None
         self.checking = self.downloading = self.closed = False
-        self.message = f'当前版本 {__version__} Preview'
+        self.message = f'当前版本 {__version__}'
         self.received = self.total = self.source_index = 0
         self.cancel = threading.Event()
         self.transfer_progress.connect(self._progress)
@@ -71,10 +71,12 @@ class UpdateService(QObject):
         self.release = release
         newer = version_tuple(release.version) > version_tuple(__version__)
         skipped = self.controller.catalog.get_setting('updates.skipped') == release.version
-        self.message = (f'发现新版 {release.version} Preview' if newer else '你已在使用最新版本')
+        self.message = (f'发现新版 {release.version}' if newer else '你已在使用最新版本')
         self.changed.emit()
         if newer and (manual or not skipped):
             self.available.emit(release)
+        else:
+            self.available.emit(None)
 
     def _check_failed(self, error, manual):
         self.checking = False
@@ -91,7 +93,8 @@ class UpdateService(QObject):
                 self.dialog.hide()
 
     def download(self):
-        if self.closed or self.checking or self.downloading or not self.release:
+        if (self.closed or self.checking or self.downloading or not self.release or
+                version_tuple(self.release.version) <= version_tuple(__version__)):
             return
         self.cancel = threading.Event()
         self.downloading = True
@@ -157,7 +160,7 @@ class UpdateDialog(QDialog):
         title = QLabel('让参考图继续陪你画画')
         title.setObjectName('title')
         layout.addWidget(title)
-        layout.addWidget(QLabel(f'当前版本：{__version__} Preview · Windows x64 便携版'))
+        layout.addWidget(QLabel(f'当前版本：{__version__} · Windows x64 便携版'))
         self.status = QLabel()
         self.status.setWordWrap(True)
         self.status.setTextFormat(Qt.PlainText)

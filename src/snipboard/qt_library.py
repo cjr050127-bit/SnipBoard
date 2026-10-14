@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import base64
 import binascii
+import threading
+import time
+import html
 
 from pathlib import Path
 from functools import lru_cache
@@ -18,6 +21,10 @@ from .catalog import Catalog
 from .features import COLORS
 from .qt_filters import FilterPanel
 from .qt_collections import PhotoGrid, WorkGroupList, NewGroupDrop
+from .qt_ai_search import FinderPanel
+from .query_plan import Condition, parse_query
+from .natural_search import search_catalog
+from .model_search import search_with_model
 
 
 @lru_cache(maxsize=1)
@@ -65,7 +72,10 @@ class PhotoModel(QAbstractListModel):
         if role == Qt.UserRole:
             return row
         if role == Qt.ToolTipRole:
-            return f"{row['source_name']}\n{row['width']} × {row['height']}\n" + ' / '.join(name for _, name in row['memberships'])
+            caption = f"{row['source_name']}\n{row['width']} × {row['height']}\n" + ' / '.join(name for _, name in row['memberships'])
+            if row.get('_finder_reason'):
+                caption += '\n模型判断：' + row['_finder_reason']
+            return html.escape(caption)
         return None
 
     def replace(self, rows):
@@ -192,9 +202,20 @@ class LibraryWindow(QMainWindow):
         self.nav, self.nav_index, self.grid_position = [], -1, 0
         self.restoring = False
         self.pending_restore = None
+        self.finder_plan = self.finder_applied_plan = None
+        self.finder_scope = None
+        self.finder_pending_scope = None
+        self.finder_generation = 0
+        self.finder_cancel = None
+        self.finder_active = False
+        self.finder_applied_model = False
+        self.finder_model_config = getattr(controller, 'finder_model_config', None)
+        self.finder_edited = False
+        self.finder_edit_scope = None
+        self.finder_edit_scope_mode = 0
         self.resize(1500, 950)
         self.setMinimumSize(1080, 700)
-        self.setWindowTitle('SnipBoard · 图片库')
+        self.setWindowTitle('SnipBoard · 找图助手预览 · 独立图库' if getattr(controller, 'preview', False) else 'SnipBoard · 图片库')
         self.setAttribute(Qt.WA_DeleteOnClose)
         self.query_timer = QTimer(self)
         self.query_timer.setSingleShot(True)
@@ -238,6 +259,10 @@ class LibraryWindow(QMainWindow):
             button.clicked.connect(callback)
             toolbar.addWidget(button)
         toolbar.addSeparator()
+        self.import_folder_button = QPushButton('导入文件夹')
+        self.import_folder_button.setToolTip('导入文件夹及子文件夹中的图片，按文件夹名自动添加标签（Ctrl+Shift+O）')
+        self.import_folder_button.clicked.connect(self.import_folder)
+        toolbar.addWidget(self.import_folder_button)
         self.search = QLineEdit()
         self.search.setPlaceholderText('搜索文件名、备注或标签')
         self.search.setClearButtonEnabled(True)
@@ -248,6 +273,9 @@ class LibraryWindow(QMainWindow):
         self.sort.addItems(['最近加入', '最早加入', '文件名称', '图片宽度'])
         self.sort.currentIndexChanged.connect(lambda _: self.refresh())
         toolbar.addWidget(self.sort)
+        finder_button = QPushButton('找图助手')
+        finder_button.clicked.connect(self.open_finder)
+        toolbar.addWidget(finder_button)
         self.thumb_size = QSlider(Qt.Horizontal)
         self.thumb_size.setRange(135, 300)
         self.thumb_size.setValue(205)
@@ -436,6 +464,23 @@ class LibraryWindow(QMainWindow):
         self.splitDockWidget(self.docks['work'], self.docks['labels'], Qt.Vertical)
         self.resizeDocks([self.docks['color'], self.docks['work']], [275, 290], Qt.Horizontal)
         self.resizeDocks([self.docks['recommendations']], [255], Qt.Vertical)
+        self.finder_panel = FinderPanel()
+        self.finder_panel.submitted.connect(self.submit_finder)
+        self.finder_panel.conditionRemoved.connect(self.remove_finder_condition)
+        self.finder_panel.clearRequested.connect(self.clear_finder)
+        self.finder_panel.cancelRequested.connect(self.cancel_finder)
+        self.finder_panel.modelSettingsRequested.connect(self.configure_finder_model)
+        self.finder_panel.modeChanged.connect(self.cancel_finder)
+        self.finder_panel.set_model(self.finder_model_config)
+        finder_dock = self.add_panel('finder', '找图助手', self.finder_panel, Qt.RightDockWidgetArea, scroll=True)
+        finder_dock.visibilityChanged.connect(lambda visible: self.cancel_finder() if not visible else None)
+        self.tabifyDockWidget(self.docks['labels'], finder_dock)
+        if getattr(self.controller, 'preview', False):
+            self.tabifyDockWidget(self.docks['work'], self.docks['labels'])
+            self.tabifyDockWidget(self.docks['work'], finder_dock)
+            self.docks['recommendations'].hide()
+            self.resizeDocks([finder_dock], [350], Qt.Horizontal)
+        finder_dock.raise_()
         self.default_panel_layout = self.saveState(1)
 
     def add_panel(self, key, title, widget, area, scroll=False):
@@ -493,6 +538,7 @@ class LibraryWindow(QMainWindow):
     def _menus(self):
         file = self.menuBar().addMenu('文件')
         self.action(file, '导入图片…', self.import_images, 'Ctrl+O')
+        self.action(file, '导入文件夹…', self.import_folder, 'Ctrl+Shift+O')
         self.action(file, '新建图片库窗口', self.controller.new_library, 'Ctrl+N')
         self.action(file, '连接 Snipaste…', self.controller.choose_source)
         self.action(file, '备份收藏库…', self.backup)
@@ -510,6 +556,7 @@ class LibraryWindow(QMainWindow):
         self.action(view, '适合窗口', self.detail_view.fit, 'F')
         self.action(view, '实际大小', self.detail_view.actual, '1')
         self.action(view, '显示／隐藏全部筛选面板', self.toggle_filter_panels, 'Tab')
+        self.action(view, '找图助手', self.open_finder, 'Ctrl+K')
         groups = self.menuBar().addMenu('标签与参考组')
         self.action(groups, '全部图片', self.select_all)
         self.action(groups, '在查看器中打开当前选择', self.open_board)
@@ -823,6 +870,10 @@ class LibraryWindow(QMainWindow):
     def refresh(self):
         if self.restoring:
             return
+        if self.finder_cancel is not None or self.finder_active:
+            self.cancel_finder(show_status=False)
+            self.finder_active = False
+            self.finder_panel.set_status('已返回常规筛选；可再次点击找图。')
         self.query_generation += 1
         generation = self.query_generation
         boards = None if self.selected_groups is None else list(self.selected_groups)
@@ -991,6 +1042,171 @@ class LibraryWindow(QMainWindow):
         if self.current and not self.catalog.has_image(self.current['digest']):
             self.return_to_grid()
         self.update_groups()
+        if self.finder_active and self.finder_applied_plan is not None:
+            if self.finder_applied_model:
+                kept = [row for row in self.rows if self.catalog.has_image(row['digest'])]
+                self.rows = kept
+                self.model.replace(kept)
+                self.finder_panel.set_status('图库信息已变化；模型结果需再次点击找图更新。')
+            else:
+                self.run_finder(self.finder_applied_plan, self.finder_scope, visual=False)
+        else:
+            self.refresh()
+
+    def open_finder(self):
+        self.docks['finder'].show()
+        self.docks['finder'].raise_()
+        self.finder_panel.query.setFocus()
+
+    def configure_finder_model(self):
+        from .qt_model_settings import configure_model
+        config = configure_model(self, self.finder_model_config)
+        if config is not None:
+            self.cancel_finder(show_status=False)
+            self.finder_model_config = self.controller.finder_model_config = config
+            self.finder_panel.set_model(config)
+            self.finder_panel.mode.setCurrentIndex(1)
+            self.finder_panel.set_status('模型已接入；点击“用模型找图”才发送本次图片。')
+
+    def submit_finder(self, text, continued=False):
+        previous = (self.finder_plan if self.finder_edited else self.finder_applied_plan) if continued else None
+        groups = self.catalog.work_groups()
+        reuse_edit = self.finder_edited and self.finder_plan is not None and text == self.finder_plan.query
+        plan = self.finder_plan if reuse_edit else parse_query(text, self.catalog.label_rows(), groups, previous)
+        scope = None
+        mode = self.finder_panel.scope.currentIndex()
+        if mode == 1:
+            scope = self.finder_edit_scope if reuse_edit and mode == self.finder_edit_scope_mode else tuple(row['digest'] for row in self.rows)
+        elif mode == 2:
+            ident = self.catalog.get_setting('work.current')
+            group = next((g for g in groups if g['id'] == ident), None)
+            if group is None:
+                self.finder_panel.set_status('请先在工作组面板设置“★ 当前”工作组。')
+                return
+            from dataclasses import replace
+            condition = Condition('scope-work', 'work', ident, '工作组：' + group['name'])
+            plan = replace(plan, conditions=tuple(c for c in plan.conditions if c.id != 'scope-work') + (condition,))
+        self.run_finder(plan, scope)
+
+    def run_finder(self, plan, scope=None, *, visual=None):
+        visual = self.finder_panel.mode.currentIndex() == 1 if visual is None else visual
+        config = self.finder_model_config if visual else None
+        if visual and config is None:
+            self.finder_panel.set_status('先点击“接入模型”，或切回轻量本地筛选。')
+            return
+        self.cancel_finder(show_status=False)
+        self.finder_generation += 1
+        generation = self.finder_generation
+        self.query_generation += 1
+        query_generation = self.query_generation
+        self.query_timer.stop()
+        self.return_to_grid()
+        self.finder_plan = plan
+        self.finder_edited = False
+        self.finder_pending_scope = scope
+        self.finder_panel.set_plan(plan)
+        self.finder_panel.set_status('正在按需分析候选缩略图…' if visual else '正在按已有信息找图…', busy=True)
+        cancel = self.finder_cancel = threading.Event()
+        root = self.catalog.root
+        sort = self.sort.currentIndex()
+        archived = True if self.archived.isChecked() else False
+        def query():
+            started = time.perf_counter()
+            with Catalog(root) as catalog:
+                if visual:
+                    result = search_with_model(catalog, plan, plan.query, config, cancel.is_set, scope_digests=scope, archived=archived)
+                else:
+                    result = search_catalog(catalog, plan, cancel.is_set, scope_digests=scope, archived=archived)
+            if sort == 1: result.rows.reverse()
+            elif sort == 2: result.rows.sort(key=lambda row: row['source_name'].casefold())
+            elif sort == 3: result.rows.sort(key=lambda row: row['width'], reverse=True)
+            return result, time.perf_counter() - started
+        self.controller.jobs.submit(query,
+            lambda value: self.finder_done(generation, query_generation, plan, scope, value, visual),
+            lambda error: self.finder_failed(generation, error), owner=self, key='finder', serial=True)
+
+    def finder_done(self, generation, query_generation, plan, scope, value, visual=False):
+        if generation != self.finder_generation or query_generation != self.query_generation:
+            return
+        result, seconds = value
+        self.finder_cancel = None
+        self.finder_pending_scope = None
+        if result.cancelled:
+            self.finder_panel.set_status('找图已停止，图片区保留上次结果。')
+            return
+        self.finder_active = True
+        self.finder_applied_plan = self.finder_plan = plan
+        self.finder_scope = scope
+        self.finder_applied_model = visual
+        self._queried(query_generation, result.rows)
+        if visual and getattr(result, 'local_only', False):
+            self.finder_applied_model = False
+            self.heading.setText('找图结果 · 本地条件已满足')
+            self.summary.setText(f'{result.total} 张符合条件 · 显示 {len(result.rows)} 张')
+            self.finder_panel.set_status('全部需求可由本地条件确认；未发送缩略图或调用模型。')
+            self.finder_panel.show_warnings(result.warnings)
+        elif visual:
+            for row in result.rows:
+                row['_finder_reason'] = result.reasons.get(row['digest'], '')
+            self.heading.setText('找图结果 · 模型判断')
+            self.summary.setText(f'{len(result.rows)} 张符合描述 · 已分析 {result.analyzed} / {result.total} 张候选')
+            suffix = '；其余图片未判断。' if result.analyzed < result.total else '；模型判断可在图片上悬停查看。'
+            self.finder_panel.set_status(f'已分析 {result.analyzed} / {result.total} 张候选 · 用时 {seconds:.1f} 秒' + suffix)
+            from .query_plan import METADATA_WARNING
+            self.finder_panel.show_warnings(tuple(w for w in result.warnings if w != METADATA_WARNING))
+        else:
+            self.heading.setText('找图结果 · 本地匹配')
+            suffix = ' · 先显示前 200 张，请继续缩小范围' if result.truncated else ''
+            self.summary.setText(f'{result.matched_count} 张匹配图片' + suffix)
+            self.finder_panel.show_warnings(result.warnings)
+            self.finder_panel.set_status(f'找到 {result.matched_count} 张 · 检索 {seconds * 1000:.0f} 毫秒' + suffix)
+
+    def finder_failed(self, generation, error):
+        if generation == self.finder_generation:
+            self.finder_cancel = None
+            self.finder_pending_scope = None
+            self.finder_panel.set_status('本次找图未完成：' + str(error))
+            self.statusBar().showMessage(str(error))
+
+    def cancel_finder(self, checked=False, *, show_status=True):
+        if self.finder_cancel is None:
+            return
+        self.finder_cancel.set()
+        self.finder_cancel = None
+        self.finder_generation += 1
+        self.finder_plan = self.finder_applied_plan
+        self.finder_pending_scope = None
+        self.finder_panel.set_plan(self.finder_applied_plan)
+        if show_status:
+            self.finder_panel.set_status('找图已停止，图片区保留上次结果。')
+
+    def remove_finder_condition(self, ident):
+        plan = self.finder_plan or self.finder_applied_plan
+        scope = self.finder_pending_scope if self.finder_cancel is not None else self.finder_scope
+        if plan is not None:
+            plan = plan.without(ident)
+            if not plan.conditions:
+                self.clear_finder()
+            elif self.finder_panel.mode.currentIndex() == 1:
+                self.cancel_finder(show_status=False)
+                self.finder_plan = plan
+                self.finder_edited = True
+                self.finder_edit_scope = scope
+                self.finder_edit_scope_mode = self.finder_panel.scope.currentIndex()
+                self.finder_panel.set_plan(plan)
+                self.finder_panel.set_status('条件已修改；点击“用模型找图”才重新发送图片。')
+            else:
+                self.run_finder(plan, scope)
+
+    def clear_finder(self):
+        self.cancel_finder(show_status=False)
+        self.finder_active = False
+        self.finder_plan = self.finder_applied_plan = None
+        self.finder_applied_model = False
+        self.finder_edited = False
+        self.finder_scope = None
+        self.finder_panel.set_plan(None)
+        self.finder_panel.set_status('已返回原筛选；点击找图才运行。')
         self.refresh()
 
     def open_board(self):
@@ -1022,11 +1238,26 @@ class LibraryWindow(QMainWindow):
             '图片 (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff *.gif)')
         if not paths:
             return
+        self._start_import(paths=paths)
+
+    def import_folder(self):
+        if getattr(self.controller, 'import_running', False):
+            self.statusBar().showMessage('正在导入图片，请等待本批完成')
+            return
+        folder = QFileDialog.getExistingDirectory(self, '导入文件夹（含子文件夹；按文件夹名添加标签）')
+        if folder:
+            self._start_import(folder=Path(folder))
+
+    def _start_import(self, *, paths=None, folder=None):
+        controller = self.controller
         controller.import_running = True
         root = self.catalog.root
-        controller.status.emit(f'正在导入 {len(paths)} 张图片…')
+        controller.status.emit(f'正在读取文件夹：{folder.name}…' if folder else f'正在导入 {len(paths)} 张图片…')
         def work():
             with Catalog(root) as catalog:
+                if folder:
+                    return catalog.import_folder(folder, controller.cancel_sync.is_set,
+                        lambda count, name: controller.status.emit(f'正在导入文件夹 · {count} 张 · {name}'))
                 return catalog.import_images(paths, controller.cancel_sync.is_set,
                     lambda count, name: controller.status.emit(f'正在导入 {count}/{len(paths)}：{name}'))
         def done(report):
@@ -1037,15 +1268,21 @@ class LibraryWindow(QMainWindow):
             controller.changed.emit()
             if controller.board:
                 controller.board.update_groups()
-            if self in controller.windows and report['board_id'] is not None:
+            selection = report.get('label_id') or report['board_id']
+            if self in controller.windows and selection is not None:
                 self.clear_filters()
-                self.select_group(report['board_id'])
+                self.select_group(selection)
                 self.return_to_grid()
-            controller.status.emit(f"导入完成：新增 {report['added']} 张，重复 {report['duplicates']} 张，失败 {len(report['errors'])} 张")
+            state = '导入已停止' if report['cancelled'] else '导入完成'
+            group = f" · 标签：{report['folder_name']}" if report.get('label_id') else ''
+            message = f"{state}：新增 {report['added']} 张，重复 {report['duplicates']} 张，失败 {len(report['errors'])} 项{group}"
+            if folder and selection is None and not report['errors'] and not report['cancelled']:
+                message = '所选文件夹及子文件夹中没有可导入的图片'
+            controller.status.emit(message)
             if report['errors']:
                 parent = controller.windows[-1] if controller.windows else None
                 box = QMessageBox(QMessageBox.Warning, '部分图片未能导入',
-                    f"{len(report['errors'])} 张图片导入失败，其余图片已保留。", parent=parent)
+                    f"{len(report['errors'])} 个文件或文件夹未能导入，其余图片已保留。", parent=parent)
                 box.setDetailedText('\n'.join(f"{e['file']}：{e['error']}" for e in report['errors']))
                 box.exec()
         def failed(error):
@@ -1123,6 +1360,7 @@ class LibraryWindow(QMainWindow):
         self.restoring = False
 
     def closeEvent(self, event):
+        self.cancel_finder(show_status=False)
         self.query_generation += 1
         self.rec_generation += 1
         self.controller.window_closed(self)

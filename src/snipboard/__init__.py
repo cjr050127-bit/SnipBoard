@@ -1,3 +1,3 @@
 """SnipBoard: independent collections from Snipaste groups."""
 
-__version__ = "0.6.6"
+__version__ = "7.0.0"

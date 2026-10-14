@@ -108,7 +108,7 @@ class Controller(QObject):
     def _update_available(self, release):
         if release and self.tray and not self.quitting:
             self.tray.showMessage('SnipBoard 有更新',
-                                  f'{release.version} Preview 已发布，点击查看并下载。',
+                                  f'{release.version} 已发布，点击查看并下载。',
                                   QSystemTrayIcon.Information, 7000)
 
     def new_library(self, state=None):

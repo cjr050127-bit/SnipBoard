@@ -12,7 +12,7 @@ class DockPanelTests(TestCase):
     def test_window_menu_toggles_every_panel_and_close_can_be_reopened(self):
         w = self.window
         menu = next(a.menu() for a in w.menuBar().actions() if a.text() == '窗口')
-        self.assertEqual(len(w.docks), 8)
+        self.assertEqual(len(w.docks), 9)
         for dock in w.docks.values():
             action = dock.toggleViewAction()
             self.assertIn(action, menu.actions())

@@ -12,6 +12,7 @@ import tempfile
 import zlib
 
 from .source import GROUP_ID, stable_read, history_directory
+from .atomic_io import replace_local_file
 
 
 def validate_png(data: bytes) -> None:
@@ -134,7 +135,7 @@ class Library:
                             stream.write(data)
                             stream.flush()
                             os.fsync(stream.fileno())
-                        os.replace(temporary, destination)
+                        replace_local_file(temporary, destination)
                     finally:
                         Path(temporary).unlink(missing_ok=True)
                 with self.db:

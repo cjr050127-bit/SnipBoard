@@ -224,7 +224,10 @@ class UpdateUITests(unittest.TestCase):
         self.window = self.controller.new_library()
         self.service = self.controller.updates
         self.service.root = Path(self.temp.name) / 'downloads'
-        self.service.checker = lambda _: Release.parse(manifest())
+        from snipboard import __version__
+        major, minor, patch_number = version_tuple(__version__)
+        self.next_version = f'{major}.{minor}.{patch_number + 1}'
+        self.service.checker = lambda _: Release.parse(manifest(self.next_version))
         test_qt.drain(self.controller)
 
     def tearDown(self):
@@ -251,7 +254,7 @@ class UpdateUITests(unittest.TestCase):
         self.service.automatic_check()
         self.assertFalse(self.service.checking)
         self.controller.catalog.set_setting('updates.enabled', True)
-        self.controller.catalog.set_setting('updates.skipped', '0.6.99')
+        self.controller.catalog.set_setting('updates.skipped', self.next_version)
         self.service.automatic_check()
         test_qt.drain(self.controller)
         self.assertFalse(self.window.update_button.isVisible())
@@ -277,6 +280,22 @@ class UpdateUITests(unittest.TestCase):
         with patch('snipboard.qt_updates.QDesktopServices.openUrl') as opened:
             QTest.mouseClick(dialog.folder_button, Qt.LeftButton)
             self.assertEqual(Path(opened.call_args.args[0].toLocalFile()), self.service.path.parent)
+
+    def test_current_and_older_remote_versions_clear_banner_and_cannot_download(self):
+        from snipboard import __version__
+        self.service.automatic_check()
+        test_qt.drain(self.controller)
+        self.assertTrue(self.window.update_button.isVisible())
+        for version in (__version__, '0.6.6'):
+            self.service.checker = lambda _, value=version: Release.parse(manifest(value))
+            self.service.manual_check()
+            test_qt.drain(self.controller)
+            self.assertFalse(self.window.update_button.isVisible())
+            self.assertFalse(self.service.dialog.download_button.isEnabled())
+            with patch.object(self.service, 'downloader') as downloader:
+                self.service.download()
+                test_qt.drain(self.controller)
+                downloader.assert_not_called()
 
     def test_cancel_retry_and_check_after_cancel(self):
         def downloader(release, root, cancel, progress, source):

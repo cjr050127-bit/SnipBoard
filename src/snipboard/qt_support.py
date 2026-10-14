@@ -7,7 +7,7 @@ import threading
 import weakref
 from shiboken6 import isValid
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, QSize, Qt
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, QThread, Signal, QSize, Qt
 from PySide6.QtGui import QImageReader, QPixmap
 
 STYLE = '''
@@ -68,8 +68,9 @@ class Jobs(QObject):
         self.pool.setMaxThreadCount(3)
         self.pending, self.counter = {}, 0
         self.latest = {}
+        self.serial_pool = None
 
-    def submit(self, function, done=lambda result: None, failed=lambda error: None, *, owner=None, key=None):
+    def submit(self, function, done=lambda result: None, failed=lambda error: None, *, owner=None, key=None, serial=False):
         self.counter += 1
         job = Job(self.counter, function)
         token = (id(owner), key) if key is not None else None
@@ -80,7 +81,15 @@ class Jobs(QObject):
             self.latest[token] = self.counter
         self.pending[self.counter] = (job, done, failed, weakref.ref(owner) if owner is not None else None, token)
         job.signals.finished.connect(self._complete)
-        self.pool.start(job)
+        if serial:
+            if self.serial_pool is None:
+                self.serial_pool = QThreadPool(self)
+                self.serial_pool.setMaxThreadCount(1)
+                self.serial_pool.setThreadPriority(QThread.LowPriority)
+                self.serial_pool.setExpiryTimeout(1000)
+            self.serial_pool.start(job)
+        else:
+            self.pool.start(job)
         return self.counter
 
     def _complete(self, number, success, result):

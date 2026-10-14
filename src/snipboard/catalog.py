@@ -16,6 +16,7 @@ from PIL import Image
 from .features import VERSION, extract, normalized_image, similarity, rgb_lab
 from .library import Library, validate_png
 from .source import inspect_source, stable_read, history_directory
+from .atomic_io import replace_local_file
 
 
 class Catalog(Library):
@@ -161,7 +162,7 @@ class Catalog(Library):
                     output.write(png)
                     output.flush()
                     os.fsync(output.fileno())
-                os.replace(temporary, destination)
+                replace_local_file(temporary, destination)
             finally:
                 Path(temporary).unlink(missing_ok=True)
         return digest
@@ -181,7 +182,7 @@ class Catalog(Library):
         temporary = Path(temporary_name)
         try:
             picture.save(temporary, format='PNG')
-            os.replace(temporary, thumb)
+            replace_local_file(temporary, thumb)
         finally:
             temporary.unlink(missing_ok=True)
         with self.db:
@@ -283,9 +284,13 @@ class Catalog(Library):
             self.set_setting('monitor.ready:' + str(source), True)
         return report
 
-    def import_images(self, paths, cancelled=lambda: False, progress=lambda *args: None):
+    def import_images(self, paths, cancelled=lambda: False, progress=lambda *args: None, *, tag_name=None):
         """Copy explicitly selected images into the library; never watch their folders."""
-        report = dict(added=0, duplicates=0, errors=[], board_id=None, cancelled=False)
+        if tag_name is not None:
+            tag_name = str(tag_name).strip()[:80]
+            if not tag_name:
+                raise ValueError('标签名称不能为空')
+        report = dict(added=0, duplicates=0, errors=[], board_id=None, label_id=None, cancelled=False)
         for index, filename in enumerate(paths, 1):
             if cancelled():
                 report['cancelled'] = True
@@ -317,11 +322,52 @@ class Catalog(Library):
                                                (board, digest, path.name)).rowcount
                     restored = self.db.execute('DELETE FROM deleted_images WHERE digest=?', (digest,)).rowcount
                     self.db.execute('DELETE FROM removed_labels WHERE key=?', (str(board),))
+                    if tag_name is not None:
+                        self._write_tags(digest, sorted(set(self.tags_for(digest)) | {tag_name}))
+                        tag_id = self.db.execute('SELECT id FROM manual_tags WHERE name=?', (tag_name,)).fetchone()[0]
+                        report['label_id'] = f'tag:{tag_id}'
                 report['board_id'] = board
                 report['added' if inserted or restored else 'duplicates'] += 1
             except (OSError, ValueError, SyntaxError, Image.DecompressionBombError) as error:
                 report['errors'].append(dict(file=str(path), error=str(error)))
             progress(index, path.name)
+        return report
+
+    def import_folder(self, folder, cancelled=lambda: False, progress=lambda *args: None):
+        """Import one directory tree once, grouping its images under its name."""
+        folder = Path(folder).expanduser().resolve()
+        if not folder.is_dir():
+            raise ValueError('请选择存在的图片文件夹')
+        if folder.is_relative_to(self.root):
+            raise ValueError('请选择收藏库之外的原始图片文件夹')
+        name = (folder.name or folder.drive or folder.anchor).strip()[:80]
+        extensions = {'.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tif', '.tiff', '.gif'}
+        scan_errors = []
+
+        def scan_error(error):
+            scan_errors.append(dict(file=str(error.filename or folder), error=str(error)))
+
+        def excluded(path):
+            return (path.is_symlink() or getattr(path, 'is_junction', lambda: False)()
+                    or path.resolve().is_relative_to(self.root))
+
+        def pictures():
+            for current, directories, files in os.walk(folder, onerror=scan_error, followlinks=False):
+                if cancelled():
+                    return
+                current = Path(current)
+                directories[:] = sorted(d for d in directories if not excluded(current / d))
+                for filename in sorted(files):
+                    if cancelled():
+                        return
+                    path = current / filename
+                    if path.suffix.lower() in extensions and not excluded(path):
+                        yield path
+
+        report = self.import_images(pictures(), cancelled, progress, tag_name=name)
+        report['errors'].extend(scan_errors)
+        report['cancelled'] |= cancelled()
+        report['folder_name'] = name
         return report
 
     def query(self, boards=None, text='', archived=False, digests=None):
